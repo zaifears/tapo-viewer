@@ -17,6 +17,12 @@ __pycache__/
 *$py.class
 *.log
 
+# PyInstaller Build Artifacts & Binaries
+build/
+dist/
+*.spec
+*.exe
+
 # User Configuration & Local Credentials
 config.json
 .user_uploaded/
