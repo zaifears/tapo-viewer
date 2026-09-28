@@ -27,8 +27,11 @@ class CameraBackend:
         self._live_process: Optional[subprocess.Popen] = None
 
     # =========================================================================
-    # TIER 1: RTSP FEED (Camera Account)
-    # =========================================================================
+    @staticmethod
+    def is_ffmpeg_available() -> bool:
+        import shutil
+        return shutil.which("ffmpeg") is not None
+
     def test_and_connect_rtsp(self, host: str, username: str, password: str) -> bool:
         """
         Verify that the camera is reachable and the RTSP port 554 is accepting credentials.
@@ -40,7 +43,7 @@ class CameraBackend:
         # 1. Quick socket probe
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(2.0)
+            s.settimeout(3.0)
             res = s.connect_ex((self.host, 554))
             s.close()
             if res != 0:
@@ -86,10 +89,14 @@ class CameraBackend:
 
     def get_rtsp_url(self, stream_num: int = 1) -> str:
         """
-        Construct RTSP stream URL for live viewing.
+        Construct RTSP stream URL for live viewing with proper RFC-3986 encoding
+        so special characters (e.g. '@', ':', '#') in username/password do not break the URL.
         stream1 = 1080p HD, stream2 = 360p SD
         """
-        return f"rtsp://{self.username}:{self.password}@{self.host}:554/stream{stream_num}"
+        import urllib.parse
+        quoted_user = urllib.parse.quote(self.username, safe="")
+        quoted_pass = urllib.parse.quote(self.password, safe="")
+        return f"rtsp://{quoted_user}:{quoted_pass}@{self.host}:554/stream{stream_num}"
 
     def get_available_players(self) -> Dict[str, str]:
         """
@@ -436,10 +443,16 @@ class CameraBackend:
         if not norm_output_dir.endswith(os.sep):
             norm_output_dir += os.sep
 
+        has_ffmpeg = self.is_ffmpeg_available()
         target_file_name = recording["file_name"]
-        if not target_file_name.lower().endswith(".mp4"):
-            base = os.path.splitext(target_file_name)[0]
-            target_file_name = f"{base}.mp4"
+        if has_ffmpeg:
+            if not target_file_name.lower().endswith(".mp4"):
+                base = os.path.splitext(target_file_name)[0]
+                target_file_name = f"{base}.mp4"
+        else:
+            if not target_file_name.lower().endswith(".ts"):
+                base = os.path.splitext(target_file_name)[0]
+                target_file_name = f"{base}.ts"
 
         final_path = os.path.join(output_dir, target_file_name)
 
@@ -470,6 +483,9 @@ class CameraBackend:
         end_ts = recording["end_ts"]
         total_duration = recording["duration_sec"]
 
+        has_ffmpeg = self.is_ffmpeg_available()
+        downloader_output = "mp4" if has_ffmpeg else "ts"
+
         downloader = Downloader(
             tapo=self.tapo,
             startTime=start_ts,
@@ -477,7 +493,7 @@ class CameraBackend:
             timeCorrection=self.time_correction,
             outputDirectory=output_dir,
             fileName=file_name,
-            output="mp4",
+            output=downloader_output,
             method="download",
             window_size=200
         )
@@ -540,36 +556,47 @@ class CameraBackend:
         ts_candidates = [f"{base_name}.ts", f"{final_path}.ts"]
         for ts_path in ts_candidates:
             if os.path.exists(ts_path) and os.path.getsize(ts_path) > 1024:
-                try:
-                    remux_cmd = [
-                        "ffmpeg", "-y", "-i", ts_path,
-                        "-c:v", "copy", "-c:a", "aac",
-                        final_path
-                    ]
-                    subprocess.run(
-                        remux_cmd,
-                        check=True,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
-                    )
-                    if os.path.exists(final_path) and os.path.getsize(final_path) > 1024:
-                        try:
-                            os.remove(ts_path)
-                        except Exception:
-                            pass
-                        if progress_cb:
-                            progress_cb({
-                                "action": "Finished",
-                                "percent": 1.0,
-                                "file_name": recording["file_name"],
-                                "status_text": f"Completed: {recording['file_name']}",
-                                "file_path": final_path
-                            })
-                        return final_path
-                except Exception as e:
-                    print(f"Fallback remux notice: {e}")
-                    return ts_path
+                if self.is_ffmpeg_available():
+                    try:
+                        remux_cmd = [
+                            "ffmpeg", "-y", "-i", ts_path,
+                            "-c:v", "copy", "-c:a", "aac",
+                            final_path
+                        ]
+                        subprocess.run(
+                            remux_cmd,
+                            check=True,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+                        )
+                        if os.path.exists(final_path) and os.path.getsize(final_path) > 1024:
+                            try:
+                                os.remove(ts_path)
+                            except Exception:
+                                pass
+                            if progress_cb:
+                                progress_cb({
+                                    "action": "Finished",
+                                    "percent": 1.0,
+                                    "file_name": os.path.basename(final_path),
+                                    "status_text": f"Completed: {os.path.basename(final_path)}",
+                                    "file_path": final_path
+                                })
+                            return final_path
+                    except Exception as e:
+                        print(f"Fallback remux notice: {e}")
+
+                # If FFmpeg is not installed or remux failed, return raw .ts
+                if progress_cb:
+                    progress_cb({
+                        "action": "Finished",
+                        "percent": 1.0,
+                        "file_name": os.path.basename(ts_path),
+                        "status_text": f"Completed: {os.path.basename(ts_path)}",
+                        "file_path": ts_path
+                    })
+                return ts_path
 
         if self._cancel_download_event.is_set():
             raise RuntimeError("Download cancelled by user.")

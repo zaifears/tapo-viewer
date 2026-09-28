@@ -32,7 +32,7 @@ def save_config(config_data: dict) -> bool:
     try:
         # If save_credentials is False, clear sensitive fields before saving
         to_save = config_data.copy()
-        if not to_save.get("save_credentials", True):
+        if not to_save.get("save_credentials", False):
             to_save["password"] = ""
             to_save["cloud_password"] = ""
 
