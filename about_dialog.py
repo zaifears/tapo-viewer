@@ -1,7 +1,14 @@
 import os
+import sys
 import webbrowser
 import customtkinter as ctk
 from PIL import Image
+
+def get_bundle_dir() -> str:
+    """Returns directory of bundled assets (sys._MEIPASS if PyInstaller frozen, else script dir)."""
+    if getattr(sys, "frozen", False):
+        return getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    return os.path.dirname(os.path.abspath(__file__))
 
 TAPO_BLUE = "#00A4E4"
 TAPO_DARK_BG = "#121316"
@@ -82,9 +89,9 @@ class AboutDialog(ctk.CTkToplevel):
         profile_row.pack(fill="x", padx=16, pady=14)
 
         # Load avatar image if available
-        avatar_path = os.path.join(os.path.dirname(__file__), "assets", "avatar_circle.png")
+        avatar_path = os.path.join(get_bundle_dir(), "assets", "avatar_circle.png")
         if not os.path.exists(avatar_path):
-            avatar_path = os.path.join(os.path.dirname(__file__), "assets", "headshot.png")
+            avatar_path = os.path.join(get_bundle_dir(), "assets", "headshot.png")
 
         if os.path.exists(avatar_path):
             try:
@@ -214,7 +221,7 @@ class AboutDialog(ctk.CTkToplevel):
         palestine_card = ctk.CTkFrame(container, fg_color=CARD_BG, corner_radius=12)
         palestine_card.pack(fill="x", pady=(0, 10))
 
-        palestine_img_path = os.path.join(os.path.dirname(__file__), "assets", "free_palestine.png")
+        palestine_img_path = os.path.join(get_bundle_dir(), "assets", "free_palestine.png")
         if os.path.exists(palestine_img_path):
             try:
                 pil_pal = Image.open(palestine_img_path)

@@ -1,7 +1,15 @@
 import json
 import os
+import sys
 
-CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+def get_app_dir() -> str:
+    """Returns persistent application directory (next to .exe if frozen, or script dir)."""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+APP_DIR = get_app_dir()
+CONFIG_FILE = os.path.join(APP_DIR, "config.json")
 
 DEFAULT_CONFIG = {
     "host": "",
@@ -9,7 +17,7 @@ DEFAULT_CONFIG = {
     "password": "",
     "cloud_password": "",
     "save_credentials": False,
-    "output_dir": os.path.join(os.path.dirname(os.path.abspath(__file__)), "recordings"),
+    "output_dir": os.path.join(APP_DIR, "recordings"),
     "auto_play_after_download": True,
     "preferred_player": "auto",
     "custom_player_path": ""

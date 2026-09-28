@@ -1490,7 +1490,8 @@ class TapoViewerApp(ctk.CTk):
     def _on_open_recordings_folder(self):
         folder = self.config.get("output_dir", "")
         if not folder:
-            folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "recordings")
+            from config_manager import APP_DIR
+            folder = os.path.join(APP_DIR, "recordings")
         os.makedirs(folder, exist_ok=True)
         os.startfile(folder)
 
