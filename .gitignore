@@ -1,0 +1,34 @@
+# Media Recordings & Temp Video Streams
+recordings/
+*.mp4
+*.ts
+*.m3u
+*.alaw
+*.mulaw
+*.aac
+
+# Python Virtual Environment & Bytecode
+.venv/
+venv/
+ENV/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.log
+
+# User Configuration & Local Credentials
+config.json
+.user_uploaded/
+.system_generated/
+
+# Temporary crops & images
+row2_crop.png
+*.png.tmp
+
+# OS & IDE metadata
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

@@ -1,0 +1,6 @@
+# Core requirements for Tapo-Viewer
+customtkinter>=6.0.0
+pytapo>=3.4.26
+pillow>=10.0.0
+requests>=2.30.0
+aiofiles>=23.0.0
