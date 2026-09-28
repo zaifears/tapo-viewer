@@ -16,8 +16,9 @@
 
 <p align="center">
   <a href="https://github.com/zaifears/tapo-viewer/releases/latest"><b>📥 Download Standalone (.exe)</b></a> •
-  <a href="#-quick-start"><b>🚀 Quick Start</b></a> •
+  <a href="#-app-previews"><b>📸 Previews</b></a> •
   <a href="#-features"><b>✨ Features</b></a> •
+  <a href="#-quick-start-running-from-source"><b>🚀 Quick Start</b></a> •
   <a href="#-special-thanks-to-pytapo"><b>❤️ PyTapo</b></a> •
   <a href="#-supported-cameras"><b>📹 Supported Devices</b></a>
 </p>
@@ -33,6 +34,26 @@ If you just want to use the app without touching Python or terminal commands:
 1. Head over to **[Releases](https://github.com/zaifears/tapo-viewer/releases/latest)**.
 2. Download **`Tapo-Viewer.exe`** (or the `.zip` archive).
 3. Double-click to run. All dependencies and UI assets are baked into the executable.
+
+---
+
+## 📸 App Previews
+
+### 🎛️ Live Dashboard & MicroSD Manager
+> Browse camera recordings with the interactive calendar, view motion events on the scrollable timeline, launch live 1080p RTSP feeds in your favorite video player, and monitor download progress with the docked manager.
+
+<p align="center">
+  <img src="https://i.ibb.co.com/SwnsYxYN/dashboard.png" alt="Tapo-Viewer Main Dashboard" width="100%" />
+</p>
+
+<br/>
+
+### 🔐 Streamlined Onboarding & Dual-Connection Setup
+> Fits standard laptop displays (1366×768) and high-DPI monitors with zero vertical scrolling. Connect with your camera credentials, choose whether you need cloud password authentication for MicroSD downloads, and select your preferred media player.
+
+<p align="center">
+  <img src="https://i.ibb.co.com/GyvfC3W/login.png" alt="Tapo-Viewer Login Screen" width="90%" />
+</p>
 
 ---
 
