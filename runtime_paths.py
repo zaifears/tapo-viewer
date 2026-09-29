@@ -115,6 +115,14 @@ def ffprobe_path() -> Optional[str]:
     return find_executable("ffprobe", "vendor/ffmpeg")
 
 
+def ffplay_path() -> Optional[str]:
+    return find_executable("ffplay", "vendor/ffmpeg")
+
+
+def vlc_exe_path() -> Optional[str]:
+    return find_executable("vlc", "vendor/vlc")
+
+
 def vlc_runtime_dir() -> Optional[Path]:
     """
     Resolve bundled LibVLC or an installed VLC runtime.

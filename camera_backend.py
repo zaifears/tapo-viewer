@@ -8,7 +8,12 @@ from typing import Callable, Optional, List, Dict, Any
 from pytapo import Tapo
 from pytapo.media_stream.downloader import Downloader
 
-from runtime_paths import ffmpeg_path, ffprobe_path
+from runtime_paths import (
+    ffmpeg_path,
+    ffprobe_path,
+    ffplay_path,
+    vlc_exe_path,
+)
 
 
 class CameraBackend:
@@ -202,7 +207,30 @@ class CameraBackend:
         import shutil
         players = {}
 
-        # 1. mpv.net (Modern, fast, hardware-accelerated RTSP player)
+        # 1. Bundled or System VLC
+        bundled_vlc = vlc_exe_path()
+        if bundled_vlc and os.path.exists(bundled_vlc):
+            players["VLC"] = bundled_vlc
+        else:
+            vlc_candidates = [
+                r"C:\Program Files\VideoLAN\VLC\vlc.exe",
+                r"C:\Program Files (x86)\VideoLAN\VLC\vlc.exe",
+            ]
+            for p in vlc_candidates:
+                if os.path.exists(p):
+                    players["VLC"] = p
+                    break
+            if "VLC" not in players and shutil.which("vlc"):
+                players["VLC"] = shutil.which("vlc")
+
+        # 2. Bundled or System FFplay
+        bundled_ffplay = ffplay_path()
+        if bundled_ffplay and os.path.exists(bundled_ffplay):
+            players["FFplay (Built-in)"] = bundled_ffplay
+        elif shutil.which("ffplay"):
+            players["FFplay (Built-in)"] = shutil.which("ffplay")
+
+        # 3. mpv.net (Modern, fast, hardware-accelerated RTSP player)
         mpvnet_candidates = [
             r"C:\Program Files\mpv.net\mpvnet.exe",
             r"C:\Program Files (x86)\mpv.net\mpvnet.exe",
@@ -213,7 +241,7 @@ class CameraBackend:
                 players["mpv.net"] = p
                 break
 
-        # 2. PotPlayer
+        # 4. PotPlayer
         pot_candidates = [
             r"C:\Program Files\DAUM\PotPlayer\PotPlayer64.exe",
             r"C:\Program Files\DAUM\PotPlayer\PotPlayerMini64.exe",
@@ -226,26 +254,9 @@ class CameraBackend:
                 players["PotPlayer"] = p
                 break
 
-        # 3. VLC
-        vlc_candidates = [
-            r"C:\Program Files\VideoLAN\VLC\vlc.exe",
-            r"C:\Program Files (x86)\VideoLAN\VLC\vlc.exe"
-        ]
-        for p in vlc_candidates:
-            if os.path.exists(p):
-                players["VLC"] = p
-                break
-        if "VLC" not in players and shutil.which("vlc"):
-            players["VLC"] = shutil.which("vlc")
-
-        # 4. Standard mpv
+        # 5. Standard mpv
         if shutil.which("mpv"):
             players["mpv"] = shutil.which("mpv")
-
-        # 5. FFplay (Built-in FFmpeg Player)
-        ffplay_exe = shutil.which("ffplay")
-        if ffplay_exe:
-            players["FFplay (Built-in)"] = ffplay_exe
 
         # 6. Windows Default Association
         players["System Default (.m3u)"] = "default"
@@ -255,7 +266,7 @@ class CameraBackend:
     def launch_live_stream_player(self, player_choice: str = "auto", custom_path: Optional[str] = None) -> Optional[subprocess.Popen]:
         """
         Launch the camera's live 1080p stream using the user's selected player.
-        Supports mpv.net, PotPlayer, VLC, FFplay, or custom player.
+        Supports bundled VLC, FFplay, mpv.net, PotPlayer, or custom player.
         """
         if not self.is_rtsp_connected:
             raise RuntimeError("[ERR_NOT_CONNECTED] Camera RTSP stream is not connected.")
@@ -269,22 +280,42 @@ class CameraBackend:
         elif player_choice in available and available[player_choice] != "default":
             target_exe = available[player_choice]
         elif player_choice == "auto":
-            # Auto-priority: mpv.net -> PotPlayer -> VLC -> FFplay
-            for preferred in ["mpv.net", "PotPlayer", "VLC", "FFplay (Built-in)"]:
+            # Auto-priority: VLC -> FFplay -> mpv.net -> PotPlayer
+            for preferred in ["VLC", "FFplay (Built-in)", "mpv.net", "PotPlayer"]:
                 if preferred in available:
                     target_exe = available[preferred]
                     break
 
+        # Ultimate fallback to bundled players
+        if not target_exe or not os.path.exists(target_exe):
+            target_exe = vlc_exe_path() or ffplay_path()
+
         if target_exe and os.path.exists(target_exe):
             exe_lower = target_exe.lower()
             if "vlc" in exe_lower:
-                cmd = [target_exe, rtsp_url, "--network-caching=1000", f"--meta-title=Tapo Live Feed (1080p) - {self.host}"]
+                cmd = [
+                    target_exe,
+                    rtsp_url,
+                    "--network-caching=1000",
+                    f"--meta-title=Tapo Live Feed (1080p) - {self.host}",
+                ]
             elif "potplayer" in exe_lower:
                 cmd = [target_exe, rtsp_url]
             elif "mpv" in exe_lower:
                 cmd = [target_exe, rtsp_url, f"--title=Tapo Live Feed (1080p) - {self.host}"]
             elif "ffplay" in exe_lower:
-                cmd = [target_exe, "-rtsp_transport", "tcp", "-window_title", f"Tapo Live Feed (1080p) - {self.host}", "-x", "1280", "-y", "720", rtsp_url]
+                cmd = [
+                    target_exe,
+                    "-rtsp_transport",
+                    "tcp",
+                    "-window_title",
+                    f"Tapo Live Feed (1080p) - {self.host}",
+                    "-x",
+                    "1280",
+                    "-y",
+                    "720",
+                    rtsp_url,
+                ]
             else:
                 cmd = [target_exe, rtsp_url]
 
@@ -296,8 +327,7 @@ class CameraBackend:
 
         raise RuntimeError(
             "No compatible external player was found. "
-            "Use the embedded player or install VLC, mpv.net, "
-            "PotPlayer, or FFplay."
+            "Please ensure bundled VLC or FFplay is intact."
         )
 
     # =========================================================================

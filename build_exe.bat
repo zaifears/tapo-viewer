@@ -53,6 +53,11 @@ if not exist "vendor\ffmpeg\ffprobe.exe" (
     exit /b 1
 )
 
+if not exist "vendor\ffmpeg\ffplay.exe" (
+    echo ERROR: vendor\ffmpeg\ffplay.exe is missing.
+    exit /b 1
+)
+
 if not exist "vendor\vlc\libvlc.dll" (
     echo ERROR: vendor\vlc\libvlc.dll is missing.
     exit /b 1
@@ -60,6 +65,11 @@ if not exist "vendor\vlc\libvlc.dll" (
 
 if not exist "vendor\vlc\libvlccore.dll" (
     echo ERROR: vendor\vlc\libvlccore.dll is missing.
+    exit /b 1
+)
+
+if not exist "vendor\vlc\vlc.exe" (
+    echo ERROR: vendor\vlc\vlc.exe is missing.
     exit /b 1
 )
 

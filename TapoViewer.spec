@@ -41,11 +41,19 @@ binaries += [
         "vendor/ffmpeg",
     ),
     (
+        str(project_dir / "vendor" / "ffmpeg" / "ffplay.exe"),
+        "vendor/ffmpeg",
+    ),
+    (
         str(project_dir / "vendor" / "vlc" / "libvlc.dll"),
         "vendor/vlc",
     ),
     (
         str(project_dir / "vendor" / "vlc" / "libvlccore.dll"),
+        "vendor/vlc",
+    ),
+    (
+        str(project_dir / "vendor" / "vlc" / "vlc.exe"),
         "vendor/vlc",
     ),
 ]
