@@ -1,6 +1,14 @@
-# Core requirements for Tapo-Viewer
+# Core UI
 customtkinter>=6.0.0
-pytapo>=3.4.26
 pillow>=10.0.0
+
+# Tapo camera communication
+pytapo>=3.4.26
 requests>=2.30.0
 aiofiles>=23.0.0
+
+# Embedded LibVLC playback
+python-vlc>=3.0.21203
+
+# Secure operating-system credential storage
+keyring>=25.0.0

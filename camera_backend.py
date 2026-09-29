@@ -8,6 +8,8 @@ from typing import Callable, Optional, List, Dict, Any
 from pytapo import Tapo
 from pytapo.media_stream.downloader import Downloader
 
+from runtime_paths import ffmpeg_path, ffprobe_path
+
 
 class CameraBackend:
     def __init__(self):
@@ -29,60 +31,140 @@ class CameraBackend:
     # =========================================================================
     @staticmethod
     def is_ffmpeg_available() -> bool:
-        import shutil
-        return shutil.which("ffmpeg") is not None
+        return ffmpeg_path() is not None
 
-    def test_and_connect_rtsp(self, host: str, username: str, password: str) -> bool:
+    @staticmethod
+    def is_ffprobe_available() -> bool:
+        return ffprobe_path() is not None
+
+    @staticmethod
+    def get_runtime_dependency_status() -> Dict[str, Any]:
+        return {
+            "ffmpeg_available": ffmpeg_path() is not None,
+            "ffmpeg_path": ffmpeg_path(),
+            "ffprobe_available": ffprobe_path() is not None,
+            "ffprobe_path": ffprobe_path(),
+        }
+
+    def test_and_connect_rtsp(
+        self,
+        host: str,
+        username: str,
+        password: str,
+    ) -> bool:
         """
-        Verify that the camera is reachable and the RTSP port 554 is accepting credentials.
+        Confirm network reachability and validate RTSP credentials.
+
+        A successful TCP connection to port 554 alone does not prove that
+        the supplied camera credentials are valid.
         """
         self.host = host.strip()
         self.username = username.strip()
         self.password = password
+        self.is_rtsp_connected = False
 
-        # 1. Quick socket probe
+        if not self.host:
+            raise ValueError("Camera host is required.")
+
+        if not self.username:
+            raise ValueError("Camera account username is required.")
+
+        if not self.password:
+            raise ValueError("Camera account password is required.")
+
         try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(3.0)
-            res = s.connect_ex((self.host, 554))
-            s.close()
-            if res != 0:
-                raise ConnectionError(f"RTSP Port 554 is closed or unreachable on {self.host}")
-        except Exception as e:
-            raise ConnectionError(f"Cannot reach camera on port 554: {e}")
+            with socket.create_connection(
+                (self.host, 554),
+                timeout=3.0,
+            ):
+                pass
+        except socket.timeout as exc:
+            raise TimeoutError(
+                f"Camera {self.host} did not respond on RTSP port 554."
+            ) from exc
+        except OSError as exc:
+            raise ConnectionError(
+                f"Cannot reach camera {self.host} on RTSP port 554: {exc}"
+            ) from exc
 
-        # 2. Probe with ffprobe to verify credentials
+        probe_binary = ffprobe_path()
+
+        if not probe_binary:
+            raise RuntimeError(
+                "FFprobe is unavailable. The Tapo-Viewer installation "
+                "is incomplete or FFmpeg is not installed."
+            )
+
         rtsp_url = self.get_rtsp_url(stream_num=1)
+
+        command = [
+            probe_binary,
+            "-v",
+            "error",
+            "-rtsp_transport",
+            "tcp",
+            "-rw_timeout",
+            "5000000",
+            "-i",
+            rtsp_url,
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=codec_name,codec_type,width,height",
+            "-of",
+            "json",
+        ]
+
         try:
-            cmd = [
-                "ffprobe",
-                "-v", "error",
-                "-rtsp_transport", "tcp",
-                "-i", rtsp_url,
-                "-show_entries", "stream=codec_type,width,height",
-                "-of", "csv=p=0"
-            ]
             result = subprocess.run(
-                cmd,
+                command,
                 capture_output=True,
                 text=True,
-                timeout=5,
-                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+                timeout=8,
+                check=False,
+                creationflags=(
+                    subprocess.CREATE_NO_WINDOW
+                    if os.name == "nt"
+                    else 0
+                ),
             )
-            if result.returncode != 0:
-                # Check for 401 Unauthorized
-                err_text = result.stderr or result.stdout
-                if "401" in err_text or "Unauthorized" in err_text:
-                    raise PermissionError("Camera Account Username or Password incorrect (401 Unauthorized).")
-                else:
-                    raise RuntimeError(f"RTSP stream check failed: {err_text.strip() or 'Unknown error'}")
-        except subprocess.TimeoutExpired:
-            raise TimeoutError("Camera timed out during RTSP handshake.")
-        except (PermissionError, ConnectionError):
-            raise
-        except Exception as e:
-            # If ffprobe is not installed, socket was already open, allow proceeding
-            pass
+
+        except subprocess.TimeoutExpired as exc:
+            raise TimeoutError(
+                "The camera timed out during the RTSP authentication test."
+            ) from exc
+        except OSError as exc:
+            raise RuntimeError(
+                f"FFprobe could not be started: {exc}"
+            ) from exc
+
+        if result.returncode != 0:
+            diagnostic = (
+                result.stderr or
+                result.stdout or
+                "No diagnostic information was returned."
+            ).strip()
+
+            diagnostic_lower = diagnostic.lower()
+
+            if (
+                "401" in diagnostic_lower or
+                "unauthorized" in diagnostic_lower or
+                "method describe failed" in diagnostic_lower
+            ):
+                raise PermissionError(
+                    "The Camera Account username or password was rejected."
+                )
+
+            raise RuntimeError(
+                "RTSP authentication or stream validation failed. "
+                f"FFprobe response: {diagnostic}"
+            )
+
+        if '"codec_type": "video"' not in result.stdout:
+            raise RuntimeError(
+                "The camera responded, but no usable video stream was found."
+            )
 
         self.is_rtsp_connected = True
         return True
@@ -97,6 +179,21 @@ class CameraBackend:
         quoted_user = urllib.parse.quote(self.username, safe="")
         quoted_pass = urllib.parse.quote(self.password, safe="")
         return f"rtsp://{quoted_user}:{quoted_pass}@{self.host}:554/stream{stream_num}"
+
+    def get_live_stream_url(self, quality: str = "HD") -> str:
+        if not self.is_rtsp_connected:
+            raise RuntimeError(
+                "[ERR_NOT_CONNECTED] RTSP is not connected."
+            )
+
+        normalized_quality = quality.strip().upper()
+        stream_number = 2 if normalized_quality == "SD" else 1
+
+        return self.get_rtsp_url(stream_num=stream_number)
+
+    def clear_sensitive_state(self) -> None:
+        self.password = ""
+        self.cloud_password = ""
 
     def get_available_players(self) -> Dict[str, str]:
         """
@@ -197,18 +294,11 @@ class CameraBackend:
             )
             return self._live_process
 
-        # Fallback to .m3u playlist
-        import tempfile
-        try:
-            m3u_path = os.path.join(tempfile.gettempdir(), "tapo_camera_live.m3u")
-            with open(m3u_path, "w", encoding="utf-8") as f:
-                f.write("#EXTM3U\n")
-                f.write(f"#EXTINF:-1,Tapo Camera Live Feed (1080p) [{self.host}]\n")
-                f.write(f"{rtsp_url}\n")
-            os.startfile(m3u_path)
-            return None
-        except Exception as e:
-            raise RuntimeError(f"Could not launch media player: {e}")
+        raise RuntimeError(
+            "No compatible external player was found. "
+            "Use the embedded player or install VLC, mpv.net, "
+            "PotPlayer, or FFplay."
+        )
 
     # =========================================================================
     # TIER 2: CLOUD MANAGEMENT (SD Card Search & Downloader)
@@ -303,11 +393,24 @@ class CameraBackend:
         self.is_cloud_connected = False
         self.tapo = None
         self.device_info = {}
-        if self._live_process and self._live_process.poll() is None:
+
+        self._cancel_download_event.set()
+
+        if (
+            self._live_process and
+            self._live_process.poll() is None
+        ):
             try:
                 self._live_process.terminate()
+                self._live_process.wait(timeout=2)
             except Exception:
-                pass
+                try:
+                    self._live_process.kill()
+                except Exception:
+                    pass
+
+        self._live_process = None
+        self.clear_sensitive_state()
 
     # =========================================================================
     # SD CARD RECORDINGS (Requires Cloud Connection)
@@ -558,10 +661,32 @@ class CameraBackend:
             if os.path.exists(ts_path) and os.path.getsize(ts_path) > 1024:
                 if self.is_ffmpeg_available():
                     try:
+                        ffmpeg_binary = ffmpeg_path()
+
+                        if not ffmpeg_binary:
+                            raise RuntimeError(
+                                "FFmpeg became unavailable during remuxing."
+                            )
+
                         remux_cmd = [
-                            "ffmpeg", "-y", "-i", ts_path,
-                            "-c:v", "copy", "-c:a", "aac",
-                            final_path
+                            ffmpeg_binary,
+                            "-hide_banner",
+                            "-loglevel",
+                            "error",
+                            "-y",
+                            "-i",
+                            ts_path,
+                            "-map",
+                            "0:v:0",
+                            "-map",
+                            "0:a:0?",
+                            "-c:v",
+                            "copy",
+                            "-c:a",
+                            "aac",
+                            "-movflags",
+                            "+faststart",
+                            final_path,
                         ]
                         subprocess.run(
                             remux_cmd,

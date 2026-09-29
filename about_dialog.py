@@ -79,7 +79,12 @@ class AboutDialog(ctk.CTkToplevel):
 
         ctk.CTkLabel(
             container,
-            text="100% Local & Private. All camera feeds, motion events, and SD card recordings stay strictly on your local home network.",
+            text=(
+                "Camera streams and MicroSD recordings are accessed directly over "
+                "your local network. Saved passwords are stored through Windows "
+                "Credential Manager and are not written to the application "
+                "configuration file."
+            ),
             font=ctk.CTkFont(family=FONT_FAMILY, size=11),
             text_color=TEXT_MUTED,
             wraplength=420,
@@ -188,7 +193,18 @@ class AboutDialog(ctk.CTkToplevel):
         # Divider
         ctk.CTkFrame(credits_card, height=1, fg_color="#272A32").pack(fill="x", padx=16)
 
-        # Link 1: PyTapo
+        # Link 1: LibVLC
+        self._create_link_row(
+            parent=credits_card,
+            icon="🎥",
+            title="LibVLC",
+            subtitle="Embedded multimedia playback engine",
+            url="https://www.videolan.org/vlc/libvlc.html"
+        )
+
+        ctk.CTkFrame(credits_card, height=1, fg_color="#272A32").pack(fill="x", padx=16)
+
+        # Link 2: PyTapo
         self._create_link_row(
             parent=credits_card,
             icon="📡",
@@ -199,7 +215,7 @@ class AboutDialog(ctk.CTkToplevel):
 
         ctk.CTkFrame(credits_card, height=1, fg_color="#272A32").pack(fill="x", padx=16)
 
-        # Link 2: CustomTkinter
+        # Link 3: CustomTkinter
         self._create_link_row(
             parent=credits_card,
             icon="🎨",
@@ -210,18 +226,29 @@ class AboutDialog(ctk.CTkToplevel):
 
         ctk.CTkFrame(credits_card, height=1, fg_color="#272A32").pack(fill="x", padx=16)
 
-        # Link 3: FFmpeg
+        # Link 4: FFmpeg
         self._create_link_row(
             parent=credits_card,
             icon="🎬",
             title="FFmpeg",
-            subtitle="Cross-platform multimedia streaming & remuxing engine",
+            subtitle="Recording remuxing and media inspection",
             url="https://ffmpeg.org"
         )
 
         ctk.CTkFrame(credits_card, height=1, fg_color="#272A32").pack(fill="x", padx=16)
 
-        # Link 4: Python
+        # Link 5: Python Keyring
+        self._create_link_row(
+            parent=credits_card,
+            icon="🔐",
+            title="Python Keyring",
+            subtitle="Windows Credential Manager integration",
+            url="https://github.com/jaraco/keyring"
+        )
+
+        ctk.CTkFrame(credits_card, height=1, fg_color="#272A32").pack(fill="x", padx=16)
+
+        # Link 6: Python
         self._create_link_row(
             parent=credits_card,
             icon="🐍",

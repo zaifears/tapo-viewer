@@ -29,9 +29,21 @@
 
 ---
 
-### 📥 Easiest Way to Run (No Python Required)
+### 📥 Standalone Windows Release
 
-If you just want to use the app without touching Python or terminal commands:
+The standalone Windows build includes:
+
+- The Python runtime
+- The application dependencies
+- FFmpeg and FFprobe
+- The LibVLC playback runtime
+- Required UI assets
+
+Users of the standalone release do not need to install Python, FFmpeg,
+VLC, or another media player separately.
+
+External VLC, mpv.net, PotPlayer, or FFplay installations remain
+supported as optional playback fallbacks.
 
 1. Head over to **[Releases](https://github.com/zaifears/tapo-viewer/releases/latest)**.
 2. Download **`Tapo-Viewer.exe`** (or the `.zip` archive).
@@ -107,20 +119,22 @@ Works with any TP-Link Tapo camera that supports local RTSP and ONVIF accounts, 
 
 ---
 
-## 🚀 Quick Start (Running from Source)
+## 🚀 Running from Source
 
-### 1. Requirements
-- Windows 10 or Windows 11 (64-bit)
-- [Python 3.10+](https://www.python.org/downloads/)
-- *(Optional but recommended)* [FFmpeg](https://ffmpeg.org/) for automatic MP4 remuxing (`winget install Gyan.FFmpeg`)
+### Requirements:
 
-### 2. Clone and Setup
+- Windows 10 or Windows 11, 64-bit
+- Python 3.10 or later
+- FFmpeg available in `vendor\ffmpeg` or through Windows PATH
+- LibVLC available in `vendor\vlc` or through an installed VLC copy
+
+### 1. Clone and Setup
 ```powershell
 git clone https://github.com/zaifears/tapo-viewer.git
 cd tapo-viewer
 ```
 
-### 3. Run
+### 2. Run
 Simply double-click **`run.bat`**. 
 
 On first run, `run.bat` automatically creates the `.venv` environment, installs all required dependencies from `requirements.txt`, and launches the app.
@@ -141,8 +155,7 @@ To compile a single standalone `.exe`:
 Double-click **`build_exe.bat`** or run:
 
 ```powershell
-.\.venv\Scripts\pip install pyinstaller
-.\.venv\Scripts\pyinstaller --noconsole --onefile --clean --collect-all customtkinter --add-data "assets;assets" --name "Tapo-Viewer" app.py
+.\.venv\Scripts\python.exe -m PyInstaller TapoViewer.spec
 ```
 
 Your binary will be generated inside `dist\Tapo-Viewer.exe`.

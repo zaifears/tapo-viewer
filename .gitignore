@@ -21,7 +21,9 @@ __pycache__/
 build/
 dist/
 *.spec
+!TapoViewer.spec
 *.exe
+vendor/
 
 # User Configuration & Local Credentials
 config.json

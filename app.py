@@ -8,10 +8,17 @@ from typing import Optional, Dict, Any, List
 import customtkinter as ctk
 from tkinter import messagebox, filedialog
 
-from config_manager import load_config, save_config
+from config_manager import (
+    load_config,
+    save_config,
+    load_credentials,
+    save_credentials,
+    delete_credentials,
+)
 from camera_backend import CameraBackend
 from tapo_calendar import TapoCalendar
 from about_dialog import AboutDialog
+from embedded_player import EmbeddedVLCPlayer
 
 # =============================================================================
 # TAPO-VIEWER DESIGN SYSTEM & PALETTE (Operate Mode, Segoe UI)
@@ -64,9 +71,6 @@ class TapoViewerApp(ctk.CTk):
         self.backend = CameraBackend()
         self.config = load_config()
 
-        # Enforce requirement: Remember credentials NEVER by default
-        self.config["save_credentials"] = False
-
         self.all_recordings: List[Dict[str, Any]] = []
         self.filtered_recordings: List[Dict[str, Any]] = []
         self.available_dates: List[str] = []
@@ -83,6 +87,7 @@ class TapoViewerApp(ctk.CTk):
         # Build Primary Screen (Login) and Dashboard Screen
         self._build_app_scaffold()
         self._show_login_screen()
+        self.after(300, self._validate_runtime_dependencies)
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
@@ -490,20 +495,54 @@ class TapoViewerApp(ctk.CTk):
             self.btn_toggle_cloud_pass.configure(text="👁")
 
     def _populate_login_fields(self):
-        if self.config.get("host"):
-            self.entry_ip.delete(0, "end")
-            self.entry_ip.insert(0, self.config["host"])
-        if self.config.get("username"):
-            self.entry_user.delete(0, "end")
-            self.entry_user.insert(0, self.config["username"])
-        if self.config.get("password") and self.config.get("save_credentials", False):
-            self.entry_pass.delete(0, "end")
-            self.entry_pass.insert(0, self.config["password"])
-        if self.config.get("cloud_password") and self.config.get("save_credentials", False):
-            self.entry_cloud_pass.delete(0, "end")
-            self.entry_cloud_pass.insert(0, self.config["cloud_password"])
-            self.var_show_cloud_pass.set(True)
+        host = str(self.config.get("host", "")).strip()
+        username = str(self.config.get("username", "")).strip()
+        remember = bool(
+            self.config.get("save_credentials", False)
+        )
+
+        self.entry_ip.delete(0, "end")
+        self.entry_user.delete(0, "end")
+        self.entry_pass.delete(0, "end")
+        self.entry_cloud_pass.delete(0, "end")
+
+        if host:
+            self.entry_ip.insert(0, host)
+
+        if username:
+            self.entry_user.insert(0, username)
+
+        self.var_save_creds.set(remember)
+
+        if not remember or not host or not username:
+            self.var_show_cloud_pass.set(False)
             self._toggle_cloud_pass_field()
+            return
+
+        try:
+            camera_password, cloud_password = load_credentials(
+                host,
+                username,
+            )
+
+            if camera_password:
+                self.entry_pass.insert(0, camera_password)
+
+            if cloud_password:
+                self.entry_cloud_pass.insert(0, cloud_password)
+                self.var_show_cloud_pass.set(True)
+            else:
+                self.var_show_cloud_pass.set(False)
+
+            self._toggle_cloud_pass_field()
+
+        except Exception as exc:
+            self.var_save_creds.set(False)
+            self._show_login_status(
+                "Saved credentials could not be loaded from Windows "
+                f"Credential Manager: {exc}",
+                is_error=True,
+            )
 
     def _test_connection_probe(self):
         host = self.entry_ip.get().strip()
@@ -611,24 +650,99 @@ class TapoViewerApp(ctk.CTk):
         self.lbl_device_ip.pack(anchor="w", padx=16, pady=(0, 12))
 
         # 2. Live Feed & Media Player Card
-        self.player_card = ctk.CTkFrame(self.sidebar_frame, corner_radius=10, fg_color=TAPO_CARD_BG)
-        self.player_card.pack(fill="x", padx=14, pady=(0, 10))
+        self.player_card = ctk.CTkFrame(
+            self.sidebar_frame,
+            corner_radius=10,
+            fg_color=TAPO_CARD_BG,
+        )
+        self.player_card.pack(
+            fill="x",
+            padx=14,
+            pady=(0, 10),
+        )
 
-        p_inner = ctk.CTkFrame(self.player_card, fg_color="transparent")
-        p_inner.pack(fill="both", expand=True, padx=12, pady=10)
+        p_inner = ctk.CTkFrame(
+            self.player_card,
+            fg_color="transparent",
+        )
+        p_inner.pack(
+            fill="both",
+            expand=True,
+            padx=12,
+            pady=10,
+        )
+
+        ctk.CTkLabel(
+            p_inner,
+            text="Live Stream",
+            font=ctk.CTkFont(
+                family=FONT_FAMILY,
+                size=12,
+                weight="bold",
+            ),
+            text_color="#FFFFFF",
+        ).pack(anchor="w", pady=(0, 6))
+
+        quality_row = ctk.CTkFrame(
+            p_inner,
+            fg_color="transparent",
+        )
+        quality_row.pack(fill="x", pady=(0, 8))
+
+        ctk.CTkLabel(
+            quality_row,
+            text="Quality:",
+            font=ctk.CTkFont(
+                family=FONT_FAMILY,
+                size=11,
+            ),
+            text_color=TAPO_TEXT_MUTED,
+        ).pack(side="left")
+
+        self.segment_live_quality = ctk.CTkSegmentedButton(
+            quality_row,
+            values=["HD", "SD"],
+            selected_color=TAPO_BLUE,
+            selected_hover_color=TAPO_BLUE_HOVER,
+            command=self._on_live_quality_changed,
+            width=120,
+            height=27,
+        )
+        self.segment_live_quality.set(
+            self.config.get("live_stream_quality", "HD")
+        )
+        self.segment_live_quality.pack(side="right")
 
         self.btn_live_stream = ctk.CTkButton(
             p_inner,
-            text="🔴 Watch Live Feed (1080p)",
-            font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold"),
-            fg_color="#D92525",
-            hover_color="#B81D1D",
-            height=36,
-            command=self._on_launch_live_stream
+            text="▶ Start Embedded Live Feed",
+            font=ctk.CTkFont(
+                family=FONT_FAMILY,
+                size=12,
+                weight="bold",
+            ),
+            fg_color=TAPO_BLUE,
+            hover_color=TAPO_BLUE_HOVER,
+            height=34,
+            command=self._on_launch_live_stream,
         )
-        self.btn_live_stream.pack(fill="x", pady=(0, 8))
+        self.btn_live_stream.pack(fill="x", pady=(0, 6))
 
-        # Media Player selection row
+        self.btn_external_stream = ctk.CTkButton(
+            p_inner,
+            text="Open in External Player ↗",
+            font=ctk.CTkFont(
+                family=FONT_FAMILY,
+                size=11,
+            ),
+            fg_color="#2B2D35",
+            hover_color=TAPO_CARD_HOVER,
+            height=30,
+            command=self._on_launch_live_stream_external,
+        )
+        self.btn_external_stream.pack(fill="x", pady=(0, 8))
+
+        # Media Player selection row (Fallback)
         player_row = ctk.CTkFrame(p_inner, fg_color="transparent")
         player_row.pack(fill="x")
 
@@ -712,12 +826,32 @@ class TapoViewerApp(ctk.CTk):
         # ---------------------------------------------------------------------
         self.main_frame = ctk.CTkFrame(self.dashboard_view, corner_radius=0, fg_color=TAPO_DARK_BG)
         self.main_frame.grid(row=0, column=1, sticky="nsew", padx=0, pady=0)
-        self.main_frame.grid_rowconfigure(2, weight=1)
+        self.main_frame.grid_rowconfigure(3, weight=1)
         self.main_frame.grid_columnconfigure(0, weight=1)
+
+        # Embedded live video panel
+        self.live_player = EmbeddedVLCPlayer(
+            self.main_frame,
+            status_callback=self._on_live_player_status,
+            external_callback=self._on_launch_live_stream_external,
+            initial_volume=int(
+                self.config.get("live_stream_volume", 50)
+            ),
+            initially_muted=bool(
+                self.config.get("live_stream_muted", True)
+            ),
+        )
+        self.live_player.grid(
+            row=0,
+            column=0,
+            padx=20,
+            pady=(18, 8),
+            sticky="nsew",
+        )
 
         # Header Bar: Active Date Display & Filter Chips
         self.header_frame = ctk.CTkFrame(self.main_frame, corner_radius=12, fg_color=TAPO_CARD_BG)
-        self.header_frame.grid(row=0, column=0, padx=20, pady=(18, 8), sticky="ew")
+        self.header_frame.grid(row=1, column=0, padx=20, pady=(10, 8), sticky="ew")
 
         # Left of header: Date badge & Quick buttons
         date_box = ctk.CTkFrame(self.header_frame, fg_color="transparent")
@@ -783,7 +917,7 @@ class TapoViewerApp(ctk.CTk):
 
         # Summary Sub-header
         self.stats_bar = ctk.CTkFrame(self.main_frame, fg_color="transparent")
-        self.stats_bar.grid(row=1, column=0, padx=25, pady=(0, 6), sticky="ew")
+        self.stats_bar.grid(row=2, column=0, padx=25, pady=(0, 6), sticky="ew")
 
         self.lbl_recordings_summary = ctk.CTkLabel(
             self.stats_bar,
@@ -807,13 +941,13 @@ class TapoViewerApp(ctk.CTk):
             corner_radius=12,
             fg_color=TAPO_CARD_BG
         )
-        self.scroll_recordings.grid(row=2, column=0, padx=20, pady=(0, 10), sticky="nsew")
+        self.scroll_recordings.grid(row=3, column=0, padx=20, pady=(0, 10), sticky="nsew")
 
         # ---------------------------------------------------------------------
         # BOTTOM DOWNLOAD TAB: PERMANENTLY DOCKED ("stay forever")
         # ---------------------------------------------------------------------
         self.progress_panel = ctk.CTkFrame(self.main_frame, corner_radius=12, fg_color=TAPO_CARD_BG, height=85)
-        self.progress_panel.grid(row=3, column=0, padx=20, pady=(0, 14), sticky="ew")
+        self.progress_panel.grid(row=4, column=0, padx=20, pady=(0, 14), sticky="ew")
 
         progress_inner = ctk.CTkFrame(self.progress_panel, fg_color="transparent")
         progress_inner.pack(fill="both", expand=True, padx=16, pady=10)
@@ -933,16 +1067,40 @@ class TapoViewerApp(ctk.CTk):
         self.login_progress.pack_forget()
         self.btn_connect.configure(state="normal", text="⚡ Connect Camera")
 
-        # Save settings if remember credentials is checked
+        # Persist non-secret preferences.
         self.config["host"] = host
         self.config["username"] = user
-        self.config["save_credentials"] = self.var_save_creds.get()
-        if self.var_save_creds.get():
-            self.config["password"] = password
-            self.config["cloud_password"] = cloud_pass if self.var_show_cloud_pass.get() else ""
-        else:
-            self.config["password"] = ""
-            self.config["cloud_password"] = ""
+        self.config["save_credentials"] = (
+            self.var_save_creds.get()
+        )
+
+        try:
+            if self.var_save_creds.get():
+                save_credentials(
+                    host=host,
+                    username=user,
+                    camera_password=password,
+                    cloud_password=(
+                        cloud_pass
+                        if self.var_show_cloud_pass.get()
+                        else None
+                    ),
+                )
+            else:
+                delete_credentials(host, user)
+
+        except Exception as exc:
+            self.config["save_credentials"] = False
+            save_config(self.config)
+
+            self._show_error_dialog(
+                "ERR_CREDENTIAL_STORE",
+                "Credential Storage Error",
+                "The camera connection succeeded, but Windows "
+                f"Credential Manager could not update the saved "
+                f"credentials.\n\n{exc}",
+            )
+
         save_config(self.config)
 
         # Update Dashboard Device Card
@@ -980,9 +1138,13 @@ class TapoViewerApp(ctk.CTk):
         self.lbl_login_status.configure(text=msg, text_color=color)
 
     def _on_disconnect_clicked(self):
+        if hasattr(self, "live_player"):
+            self.live_player.stop()
+
         self.backend.disconnect()
         self.all_recordings = []
         self.filtered_recordings = []
+        self.available_dates = []
         self._show_login_screen()
 
     # =========================================================================
@@ -1057,11 +1219,82 @@ class TapoViewerApp(ctk.CTk):
 
     def _on_launch_live_stream(self):
         try:
-            player_pref = self.config.get("preferred_player", "auto")
-            custom_path = self.config.get("custom_player_path")
-            self.backend.launch_live_stream_player(player_choice=player_pref, custom_path=custom_path)
-        except Exception as e:
-            self._show_error_dialog("ERR_PLAYER_LAUNCH", "Live Stream Error", f"Could not launch live stream player: {e}")
+            quality = self.config.get(
+                "live_stream_quality",
+                "HD",
+            )
+            stream_url = self.backend.get_live_stream_url(
+                quality=quality
+            )
+            self.live_player.play_url(stream_url)
+
+        except Exception as exc:
+            self._show_error_dialog(
+                "ERR_EMBEDDED_PLAYER",
+                "Live Stream Error",
+                f"Could not start the embedded live stream:\n\n{exc}",
+                action=(
+                    "Confirm that the camera is connected, RTSP is enabled, "
+                    "and the bundled LibVLC runtime is present. You can also "
+                    "use the external-player fallback."
+                ),
+            )
+
+    def _on_launch_live_stream_external(self):
+        try:
+            player_pref = self.config.get(
+                "preferred_player",
+                "auto",
+            )
+            custom_path = self.config.get(
+                "custom_player_path"
+            )
+
+            self.backend.launch_live_stream_player(
+                player_choice=player_pref,
+                custom_path=custom_path,
+            )
+
+        except Exception as exc:
+            self._show_error_dialog(
+                "ERR_EXTERNAL_PLAYER",
+                "External Player Error",
+                f"Could not launch an external player:\n\n{exc}",
+            )
+
+    def _on_live_quality_changed(self, quality: str):
+        self.config["live_stream_quality"] = quality
+        save_config(self.config)
+
+        if self.backend.is_rtsp_connected:
+            try:
+                stream_url = self.backend.get_live_stream_url(
+                    quality=quality
+                )
+                self.live_player.play_url(stream_url)
+            except Exception as exc:
+                self._show_error_dialog(
+                    "ERR_STREAM_QUALITY",
+                    "Stream Quality Error",
+                    f"Could not switch to {quality} quality:\n\n{exc}",
+                )
+
+    def _on_live_player_status(
+        self,
+        status_text: str,
+        _status_color: str,
+    ):
+        if hasattr(self, "btn_live_stream"):
+            if status_text == "Live":
+                self.btn_live_stream.configure(
+                    text="● Embedded Feed Active",
+                    fg_color=TAPO_GREEN,
+                )
+            else:
+                self.btn_live_stream.configure(
+                    text="▶ Start Embedded Live Feed",
+                    fg_color=TAPO_BLUE,
+                )
 
     # =========================================================================
     # CALENDAR & DATE SELECTION
@@ -1360,13 +1593,38 @@ class TapoViewerApp(ctk.CTk):
     # DOWNLOAD & PLAYBACK (Works On Any Drive/Folder, Remuxes Cleanly)
     # =========================================================================
     def _on_play_clicked(self, rec: Dict[str, Any]):
-        if rec["is_downloaded"] and os.path.exists(rec["file_path"]):
+        if (
+            rec["is_downloaded"] and
+            os.path.exists(rec["file_path"])
+        ):
             try:
-                player_pref = self.config.get("preferred_player", "auto")
-                custom_path = self.config.get("custom_player_path")
-                self.backend.play_file(rec["file_path"], player_choice=player_pref, custom_path=custom_path)
-            except Exception as e:
-                self._show_error_dialog("ERR_PLAYBACK", "Playback Error", f"Could not open file: {e}")
+                self.live_player.play_file(rec["file_path"])
+
+            except Exception as embedded_error:
+                try:
+                    player_pref = self.config.get(
+                        "preferred_player",
+                        "auto",
+                    )
+                    custom_path = self.config.get(
+                        "custom_player_path",
+                    )
+
+                    self.backend.play_file(
+                        rec["file_path"],
+                        player_choice=player_pref,
+                        custom_path=custom_path,
+                    )
+
+                except Exception as external_error:
+                    self._show_error_dialog(
+                        "ERR_PLAYBACK",
+                        "Playback Error",
+                        "Neither the embedded player nor the external "
+                        "fallback could open the recording.\n\n"
+                        f"Embedded player: {embedded_error}\n"
+                        f"External player: {external_error}",
+                    )
         else:
             self.auto_play_target = rec["file_path"]
             self._start_download(rec)
@@ -1432,14 +1690,24 @@ class TapoViewerApp(ctk.CTk):
         rec["file_path"] = file_path
         self._refresh_rendered_cards()
 
-        if self.auto_play_target and os.path.exists(file_path):
+        should_auto_play = bool(
+            self.config.get(
+                "auto_play_after_download",
+                True,
+            )
+        )
+
+        if (
+            should_auto_play and
+            self.auto_play_target and
+            os.path.exists(file_path)
+        ):
             self.auto_play_target = None
+
             try:
-                player_pref = self.config.get("preferred_player", "auto")
-                custom_path = self.config.get("custom_player_path")
-                self.backend.play_file(file_path, player_choice=player_pref, custom_path=custom_path)
-            except Exception as e:
-                print(f"Auto-play error: {e}")
+                self.live_player.play_file(file_path)
+            except Exception as exc:
+                print(f"Embedded auto-play warning: {exc}")
 
     def _on_download_error(self, err_msg: str):
         self.btn_cancel_dl.configure(state="disabled")
@@ -1516,9 +1784,45 @@ class TapoViewerApp(ctk.CTk):
             msg += f"\n\nSuggested Fix:\n{action}"
         messagebox.showerror(f"{title} ({code})", msg)
 
+    def _validate_runtime_dependencies(self):
+        status = self.backend.get_runtime_dependency_status()
+
+        missing = []
+
+        if not status["ffmpeg_available"]:
+            missing.append("FFmpeg")
+
+        if not status["ffprobe_available"]:
+            missing.append("FFprobe")
+
+        if missing:
+            self._show_error_dialog(
+                "ERR_RUNTIME_DEPENDENCY",
+                "Installation Incomplete",
+                "The following application components are missing:\n\n"
+                + "\n".join(f"• {item}" for item in missing),
+                action=(
+                    "Reinstall Tapo-Viewer or restore the files under "
+                    "vendor\\ffmpeg."
+                ),
+            )
+
     def _on_close(self):
-        self.backend.disconnect()
-        self.destroy()
+        try:
+            if hasattr(self, "live_player"):
+                self.config["live_stream_volume"] = (
+                    self.live_player.get_volume()
+                )
+                self.config["live_stream_muted"] = (
+                    self.live_player.is_muted()
+                )
+                self.live_player.close()
+
+            save_config(self.config)
+
+        finally:
+            self.backend.disconnect()
+            self.destroy()
 
 
 if __name__ == "__main__":
