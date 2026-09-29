@@ -47,20 +47,35 @@ class AboutDialog(ctk.CTkToplevel):
         container = ctk.CTkScrollableFrame(self, fg_color="transparent", corner_radius=0)
         container.pack(fill="both", expand=True, padx=20, pady=20)
 
-        # Header Title
+        # Header with Logo + Title
+        header_frame = ctk.CTkFrame(container, fg_color="transparent")
+        header_frame.pack(fill="x", pady=(0, 10))
+
+        logo_path = os.path.join(get_bundle_dir(), "assets", "logo.png")
+        if os.path.exists(logo_path):
+            try:
+                logo_img = Image.open(logo_path).resize((48, 48), Image.Resampling.LANCZOS)
+                logo_ctk = ctk.CTkImage(light_image=logo_img, dark_image=logo_img, size=(48, 48))
+                ctk.CTkLabel(header_frame, image=logo_ctk, text="").pack(side="left", padx=(0, 12))
+            except Exception:
+                pass
+
+        title_box = ctk.CTkFrame(header_frame, fg_color="transparent")
+        title_box.pack(side="left", fill="both", expand=True)
+
         ctk.CTkLabel(
-            container,
+            title_box,
             text="Tapo-Viewer",
             font=ctk.CTkFont(family=FONT_FAMILY, size=22, weight="bold"),
             text_color=TEXT_WHITE
-        ).pack(anchor="w", pady=(0, 2))
+        ).pack(anchor="w")
 
         ctk.CTkLabel(
-            container,
-            text="v1.0.0 Production Edition",
+            title_box,
+            text="v1.0.0 Desktop Edition",
             font=ctk.CTkFont(family=FONT_FAMILY, size=12, weight="bold"),
             text_color=TAPO_BLUE
-        ).pack(anchor="w", pady=(0, 8))
+        ).pack(anchor="w")
 
         ctk.CTkLabel(
             container,

@@ -1,6 +1,8 @@
 <div align="center">
 
-# 📷 Tapo-Viewer
+<img src="assets/icon-512.png" alt="Tapo-Viewer Logo" width="120" height="120" />
+
+# Tapo-Viewer
 
 **Ability to play live and download recorded clips with modern GUI from Tapo devices**
 
