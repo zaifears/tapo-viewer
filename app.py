@@ -41,6 +41,15 @@ class TapoViewerApp(ctk.CTk):
         self.minsize(980, 600)
         self.configure(fg_color=TAPO_DARK_BG)
 
+        # Set Window Icon
+        try:
+            from about_dialog import get_bundle_dir
+            icon_file = os.path.join(get_bundle_dir(), "assets", "icon.ico")
+            if os.path.exists(icon_file):
+                self.iconbitmap(icon_file)
+        except Exception:
+            pass
+
         # Start maximized on Windows (standard full desktop view)
         try:
             self.after(50, lambda: self.state("zoomed"))

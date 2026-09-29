@@ -12,7 +12,7 @@ if not exist ".venv\Scripts\pyinstaller.exe" (
 )
 
 echo Packaging application into dist\Tapo-Viewer.exe...
-".venv\Scripts\pyinstaller.exe" --noconsole --onefile --clean --collect-all customtkinter --add-data "assets;assets" --name "Tapo-Viewer" app.py
+".venv\Scripts\pyinstaller.exe" --noconsole --onefile --clean --collect-all customtkinter --add-data "assets;assets" --icon "assets\icon.ico" --name "Tapo-Viewer" app.py
 
 if %ERRORLEVEL% EQU 0 (
     echo.
