@@ -388,12 +388,52 @@ class TapoViewerApp(ctk.CTk):
         guide_card = ctk.CTkFrame(grid_container, corner_radius=12, fg_color=TAPO_CARD_BG)
         guide_card.grid(row=0, column=1, sticky="nsew", padx=(10, 6), pady=6)
 
+        # Red Warning Banner: Background CMD Windows Are Normal
+        cmd_notice_card = ctk.CTkFrame(
+            guide_card,
+            corner_radius=10,
+            fg_color="#2A1418",
+            border_width=1,
+            border_color="#E74C3C"
+        )
+        cmd_notice_card.pack(fill="x", padx=16, pady=(14, 10))
+
+        cmd_notice_inner = ctk.CTkFrame(cmd_notice_card, fg_color="transparent")
+        cmd_notice_inner.pack(fill="x", padx=12, pady=10)
+
+        notice_header = ctk.CTkFrame(cmd_notice_inner, fg_color="transparent")
+        notice_header.pack(fill="x", pady=(0, 4))
+
+        ctk.CTkLabel(
+            notice_header,
+            text="⚠️ Notice: Background CMD Windows Are Normal",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12, weight="bold"),
+            text_color="#FF6B6B"
+        ).pack(side="left")
+
+        cmd_explanation = (
+            "During video download, remuxing, or playback, you may see brief command prompt "
+            "(CMD/terminal) windows pop up. This is completely normal and expected.\n\n"
+            "Why this happens: Tapo-Viewer uses bundled, high-performance multimedia engines "
+            "(FFmpeg & LibVLC) to securely decrypt live camera feeds and convert raw MicroSD "
+            "stream chunks into standard MP4 files directly on your PC with zero cloud dependency. "
+            "Windows briefly flashes a background console when spawning these media helper processes."
+        )
+        ctk.CTkLabel(
+            cmd_notice_inner,
+            text=cmd_explanation,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=10),
+            text_color="#FADBD8",
+            wraplength=380,
+            justify="left"
+        ).pack(anchor="w")
+
         ctk.CTkLabel(
             guide_card,
             text="📘 Tapo Camera Setup Guide",
             font=ctk.CTkFont(family=FONT_FAMILY, size=16, weight="bold"),
             text_color="#FFFFFF"
-        ).pack(anchor="w", padx=20, pady=(14, 2))
+        ).pack(anchor="w", padx=20, pady=(6, 2))
 
         ctk.CTkLabel(
             guide_card,
@@ -1428,13 +1468,13 @@ class TapoViewerApp(ctk.CTk):
         )
         card.pack(fill="x", padx=6, pady=4)
 
-        # Left: Event badge thumbnail box with duration pill
-        thumb_frame = ctk.CTkFrame(card, width=54, height=44, corner_radius=6, fg_color="#101114")
+        # 1. Left: Event badge thumbnail box with duration pill
+        thumb_frame = ctk.CTkFrame(card, width=58, height=44, corner_radius=6, fg_color="#101114")
         thumb_frame.pack_propagate(False)
         thumb_frame.pack(side="left", padx=(8, 6), pady=6)
 
         icon_text = "🏃" if rec["is_motion"] else "⏱️"
-        ctk.CTkLabel(thumb_frame, text=icon_text, font=ctk.CTkFont(family=FONT_FAMILY, size=15)).place(relx=0.5, rely=0.38, anchor="center")
+        ctk.CTkLabel(thumb_frame, text=icon_text, font=ctk.CTkFont(family=FONT_FAMILY, size=15)).place(relx=0.35, rely=0.48, anchor="center")
 
         dur_pill = ctk.CTkLabel(
             thumb_frame,
@@ -1442,12 +1482,57 @@ class TapoViewerApp(ctk.CTk):
             font=ctk.CTkFont(family=FONT_FAMILY, size=8, weight="bold"),
             fg_color="#000000",
             corner_radius=3,
-            padx=2,
+            padx=3,
             pady=0
         )
-        dur_pill.place(relx=0.92, rely=0.92, anchor="se")
+        dur_pill.place(relx=0.96, rely=0.94, anchor="se")
 
-        # Center: Timestamp & Event Metadata
+        # 2. Right: Action Buttons FIRST (Pack side="right" before expanding center)
+        action_frame = ctk.CTkFrame(card, fg_color="transparent")
+        action_frame.pack(side="right", padx=(4, 8), pady=6)
+
+        if rec["is_downloaded"]:
+            # When downloaded, a single prominent green Play button is shown.
+            btn_play = ctk.CTkButton(
+                action_frame,
+                text="▶ Play",
+                width=76,
+                height=28,
+                font=ctk.CTkFont(family=FONT_FAMILY, size=11, weight="bold"),
+                fg_color=TAPO_GREEN,
+                hover_color="#27AE60",
+                corner_radius=5,
+                command=lambda r=rec: self._on_play_clicked(r)
+            )
+            btn_play.pack(side="left")
+        else:
+            btn_play = ctk.CTkButton(
+                action_frame,
+                text="▶ Play",
+                width=58,
+                height=28,
+                font=ctk.CTkFont(family=FONT_FAMILY, size=11, weight="bold"),
+                fg_color=TAPO_BLUE,
+                hover_color=TAPO_BLUE_HOVER,
+                corner_radius=5,
+                command=lambda r=rec: self._on_play_clicked(r)
+            )
+            btn_play.pack(side="left", padx=(0, 4))
+
+            btn_dl = ctk.CTkButton(
+                action_frame,
+                text="Download",
+                width=76,
+                height=28,
+                font=ctk.CTkFont(family=FONT_FAMILY, size=10, weight="bold"),
+                fg_color="#2B2D35",
+                hover_color=TAPO_CARD_HOVER,
+                corner_radius=5,
+                command=lambda r=rec: self._on_download_clicked(r)
+            )
+            btn_dl.pack(side="left")
+
+        # 3. Center: Timestamp & Event Metadata (Takes remaining flexible space)
         center_frame = ctk.CTkFrame(card, fg_color="transparent")
         center_frame.pack(side="left", fill="both", expand=True, padx=4, pady=4)
 
@@ -1490,53 +1575,6 @@ class TapoViewerApp(ctk.CTk):
                 padx=5,
                 pady=1
             ).pack(side="left", padx=(5, 0))
-
-        # Right: Action Buttons (Play & Download)
-        action_frame = ctk.CTkFrame(card, fg_color="transparent")
-        action_frame.pack(side="right", padx=(4, 8), pady=6)
-
-        play_bg = TAPO_GREEN if rec["is_downloaded"] else TAPO_BLUE
-        play_hover = "#27AE60" if rec["is_downloaded"] else TAPO_BLUE_HOVER
-
-        btn_play = ctk.CTkButton(
-            action_frame,
-            text="▶ Play",
-            width=62,
-            height=28,
-            font=ctk.CTkFont(family=FONT_FAMILY, size=11, weight="bold"),
-            fg_color=play_bg,
-            hover_color=play_hover,
-            corner_radius=5,
-            command=lambda r=rec: self._on_play_clicked(r)
-        )
-        btn_play.pack(side="left", padx=(0, 4))
-
-        if rec["is_downloaded"]:
-            btn_dl = ctk.CTkButton(
-                action_frame,
-                text="✓ Saved",
-                width=66,
-                height=28,
-                font=ctk.CTkFont(family=FONT_FAMILY, size=10, weight="bold"),
-                fg_color="#183824",
-                hover_color="#235235",
-                text_color="#2ECC71",
-                corner_radius=5,
-                command=lambda r=rec: self._on_download_clicked(r)
-            )
-        else:
-            btn_dl = ctk.CTkButton(
-                action_frame,
-                text="Download",
-                width=76,
-                height=28,
-                font=ctk.CTkFont(family=FONT_FAMILY, size=10, weight="bold"),
-                fg_color="#2B2D35",
-                hover_color=TAPO_CARD_HOVER,
-                corner_radius=5,
-                command=lambda r=rec: self._on_download_clicked(r)
-            )
-        btn_dl.pack(side="left")
 
     def _show_empty_placeholder(self, text: str):
         for widget in self.scroll_recordings.winfo_children():
