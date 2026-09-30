@@ -62,6 +62,7 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
 
         self._current_url: Optional[str] = None
         self._playing_file: Optional[str] = None
+        self._current_mode: str = "live"  # "live" or "replay"
         self._is_playing = False
         self._is_paused = False
         self._muted = bool(initially_muted)
@@ -77,7 +78,7 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
     def _build_ui(self) -> None:
         # Header bar: Title, back to live button, status
         header = ctk.CTkFrame(self, fg_color="transparent")
-        header.pack(fill="x", padx=14, pady=(10, 6))
+        header.pack(fill="x", padx=6, pady=(6, 4))
 
         left = ctk.CTkFrame(header, fg_color="transparent")
         left.pack(side="left")
@@ -100,19 +101,19 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
             text="Live Camera",
             font=ctk.CTkFont(
                 family=FONT_FAMILY,
-                size=14,
+                size=13,
                 weight="bold",
             ),
             text_color="#FFFFFF",
         )
-        self.title_label.pack(side="left", padx=(6, 8))
+        self.title_label.pack(side="left", padx=(4, 6))
 
-        # Back to Live stream button (shown when playing recorded clips)
+        # Back to Live stream button (prominently displayed when playing recorded clips)
         self.btn_back_to_live = ctk.CTkButton(
             left,
-            text="● Back to Live Feed",
-            width=130,
-            height=26,
+            text="🔴 Back to Live Feed",
+            width=124,
+            height=24,
             fg_color=TAPO_BLUE,
             hover_color=TAPO_BLUE_HOVER,
             font=ctk.CTkFont(
@@ -132,20 +133,20 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
             ),
             text_color=TAPO_MUTED,
         )
-        self.status_label.pack(side="right")
+        self.status_label.pack(side="right", padx=(0, 4))
 
-        # Video container
+        # Video container: 16:9 aspect ratio sizing
         self.video_container = ctk.CTkFrame(
             self,
             fg_color=TAPO_PANEL_BG,
             corner_radius=8,
-            height=340,
+            height=320,
         )
         self.video_container.pack(
-            fill="both",
-            expand=True,
-            padx=14,
-            pady=(0, 8),
+            fill="x",
+            expand=False,
+            padx=6,
+            pady=(0, 6),
         )
         self.video_container.pack_propagate(False)
 
@@ -171,16 +172,19 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
         )
         self.placeholder.place(relx=0.5, rely=0.5, anchor="center")
 
+        # Dynamically maintain 16:9 aspect ratio on resize
+        self.bind("<Configure>", self._on_resize)
+
         # Controls Toolbar (Play/Pause, Stop, Sound/Mute, Volume, Quality, External)
         controls = ctk.CTkFrame(self, fg_color="transparent")
-        controls.pack(fill="x", padx=14, pady=(0, 10))
+        controls.pack(fill="x", padx=6, pady=(0, 6))
 
         # Play / Pause toggle button
         self.play_button = ctk.CTkButton(
             controls,
             text="▶ Start Live",
-            width=95,
-            height=30,
+            width=84,
+            height=28,
             fg_color=TAPO_BLUE,
             hover_color=TAPO_BLUE_HOVER,
             font=ctk.CTkFont(
@@ -190,14 +194,14 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
             ),
             command=self.toggle_play_pause,
         )
-        self.play_button.pack(side="left", padx=(0, 6))
+        self.play_button.pack(side="left", padx=(0, 4))
 
         # Stop button
         self.stop_button = ctk.CTkButton(
             controls,
             text="■ Stop",
-            width=68,
-            height=30,
+            width=54,
+            height=28,
             fg_color="#343740",
             hover_color=TAPO_RED,
             font=ctk.CTkFont(
@@ -207,78 +211,91 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
             ),
             command=self.stop,
         )
-        self.stop_button.pack(side="left", padx=(0, 8))
+        self.stop_button.pack(side="left", padx=(0, 6))
 
-        # Sound / Mute toggle button (Unmuted by default!)
+        # Sound / Mute toggle button
         self.mute_button = ctk.CTkButton(
             controls,
-            text="🔇 Muted" if self._muted else "🔊 Sound",
-            width=84,
-            height=30,
+            text="🔇" if self._muted else "🔊",
+            width=36,
+            height=28,
             fg_color="#552222" if self._muted else "#343740",
             hover_color="#6B2D2D" if self._muted else "#454955",
             font=ctk.CTkFont(
                 family=FONT_FAMILY,
-                size=11,
+                size=13,
             ),
             command=self.toggle_mute,
         )
-        self.mute_button.pack(side="left", padx=(0, 8))
+        self.mute_button.pack(side="left", padx=(0, 4))
 
         # Volume slider
         self.volume_slider = ctk.CTkSlider(
             controls,
             from_=0,
             to=100,
-            width=110,
+            width=80,
             command=self._on_volume_changed,
         )
         self.volume_slider.set(self._volume)
-        self.volume_slider.pack(side="left", padx=(0, 6))
+        self.volume_slider.pack(side="left", padx=(0, 4))
 
         self.volume_label = ctk.CTkLabel(
             controls,
             text=f"{self._volume}%",
-            width=36,
+            width=32,
             font=ctk.CTkFont(
                 family=FONT_FAMILY,
                 size=10,
             ),
             text_color=TAPO_MUTED,
         )
-        self.volume_label.pack(side="left", padx=(0, 10))
+        self.volume_label.pack(side="left", padx=(0, 6))
 
         # Quality Switcher (HD / SD)
         if self.quality_callback:
             self.quality_segment = ctk.CTkSegmentedButton(
                 controls,
                 values=["HD", "SD"],
-                width=90,
-                height=28,
+                width=72,
+                height=26,
                 selected_color=TAPO_BLUE,
                 selected_hover_color=TAPO_BLUE_HOVER,
-                font=ctk.CTkFont(family=FONT_FAMILY, size=11, weight="bold"),
+                font=ctk.CTkFont(family=FONT_FAMILY, size=10, weight="bold"),
                 command=self._on_quality_segment_changed,
             )
             self.quality_segment.set(self._current_quality)
-            self.quality_segment.pack(side="left", padx=(0, 8))
+            self.quality_segment.pack(side="left", padx=(0, 6))
 
         # Open Externally Button
         if self.external_callback:
             self.external_button = ctk.CTkButton(
                 controls,
-                text="Open externally ↗",
-                width=115,
-                height=30,
+                text="↗ External",
+                width=85,
+                height=28,
                 fg_color="#343740",
                 hover_color="#454955",
                 font=ctk.CTkFont(
                     family=FONT_FAMILY,
-                    size=11,
+                    size=10,
+                    weight="bold",
                 ),
                 command=self._on_external_clicked,
             )
             self.external_button.pack(side="right")
+
+    def _on_resize(self, event=None) -> None:
+        try:
+            w = self.winfo_width()
+            if w > 200:
+                target_h = int((w - 12) * 9 / 16)
+                target_h = max(220, min(target_h, 560))
+                cur_h = self.video_container.cget("height")
+                if abs(cur_h - target_h) > 6:
+                    self.video_container.configure(height=target_h)
+        except Exception:
+            pass
 
     def _initialize_vlc(self) -> None:
         try:
@@ -294,8 +311,6 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
                 "--no-osd",
                 "--rtsp-tcp",
                 "--network-caching=800",
-                "--clock-jitter=0",
-                "--clock-synchro=0",
                 "--quiet",
                 "--no-mouse-events",
                 "--no-keyboard-events",
@@ -360,6 +375,7 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
             raise RuntimeError("Embedded player has not finished initializing.")
 
         with self._operation_lock:
+            self._current_mode = "live"
             self._current_url = stream_url
             self._playing_file = None
             self._player.stop()
@@ -367,8 +383,6 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
             media = self._instance.media_new(stream_url)
             media.add_option(":rtsp-tcp")
             media.add_option(":network-caching=800")
-            media.add_option(":clock-jitter=0")
-            media.add_option(":clock-synchro=0")
 
             self._player.set_media(media)
             self._attach_video_surface()
@@ -395,6 +409,7 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
             raise RuntimeError("Embedded player has not finished initializing.")
 
         with self._operation_lock:
+            self._current_mode = "replay"
             self._playing_file = file_path
             abs_path = os.path.abspath(file_path)
             media = self._instance.media_new_path(abs_path)
@@ -424,12 +439,12 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
 
             # Stopped, Ended, or Error: restart active stream/clip
             if state in (self._vlc.State.Stopped, self._vlc.State.Ended, self._vlc.State.Error, self._vlc.State.NothingSpecial):
-                if self._playing_file and os.path.exists(self._playing_file):
+                if self._current_mode == "replay" and self._playing_file and os.path.exists(self._playing_file):
                     self.play_file(self._playing_file)
-                elif self._current_url:
-                    self.play_url(self._current_url)
                 elif self.live_callback:
                     self.live_callback()
+                elif self._current_url:
+                    self.play_url(self._current_url)
                 return
 
             # Currently Playing: Pause
@@ -453,7 +468,7 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
                     hover_color="#454955",
                 )
                 self.live_dot.configure(text_color=TAPO_GREEN)
-                self._set_status("Live" if self._current_url else "Playing", TAPO_GREEN)
+                self._set_status("Live" if self._current_mode == "live" else "Playing", TAPO_GREEN)
 
     def stop(self) -> None:
         if self._player is None:
@@ -463,6 +478,8 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
             self._player.stop()
             self._is_playing = False
             self._is_paused = False
+            self._current_mode = "live"
+            self._playing_file = None
             self._show_stopped_state()
 
     def toggle_mute(self) -> None:
@@ -474,7 +491,7 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
                 self._player.audio_set_volume(self._volume)
 
         self.mute_button.configure(
-            text="🔇 Muted" if self._muted else "🔊 Sound",
+            text="🔇" if self._muted else "🔊",
             fg_color="#552222" if self._muted else "#343740",
             hover_color="#6B2D2D" if self._muted else "#454955",
         )
@@ -488,7 +505,7 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
                 self._muted = False
                 self._player.audio_set_mute(False)
                 self.mute_button.configure(
-                    text="🔊 Sound",
+                    text="🔊",
                     fg_color="#343740",
                     hover_color="#454955",
                 )
@@ -511,10 +528,17 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
             self.quality_callback(value)
 
     def _on_back_to_live_clicked(self) -> None:
-        if self.live_callback:
-            self.live_callback()
-        elif self._current_url:
-            self.play_url(self._current_url)
+        with self._operation_lock:
+            if self._player is not None:
+                self._player.stop()
+            self._playing_file = None
+            self._current_mode = "live"
+            self.btn_back_to_live.pack_forget()
+            self.title_label.configure(text="Live Camera")
+            if self.live_callback:
+                self.live_callback()
+            elif self._current_url:
+                self.play_url(self._current_url)
 
     def _on_external_clicked(self) -> None:
         if self.external_callback:
@@ -551,10 +575,11 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
             fg_color="#343740",
             hover_color="#454955",
         )
-        self._set_status("Live" if self._current_url else "Playing Clip", TAPO_GREEN)
+        self._set_status("Live" if self._current_mode == "live" else "Playing Clip", TAPO_GREEN)
 
-        # Re-apply audio volume & un-mute once tracks are negotiated by LibVLC
-        self.after(250, self._ensure_audio_pipeline)
+        # Staged checks to guarantee un-muting once RTSP track SDP negotiation completes
+        for delay in (250, 750, 1500, 3000):
+            self.after(delay, self._ensure_audio_pipeline)
 
     def _ensure_audio_pipeline(self) -> None:
         if self._player is None:
@@ -563,13 +588,16 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
             self._player.audio_set_volume(self._volume)
             self._player.audio_set_mute(self._muted)
 
-            # Check if audio track is active, select track 1 if not set
+            # Query track descriptions
             tracks = self._player.audio_get_track_description()
-            if tracks and len(tracks) > 1:
+            if tracks:
                 cur_track = self._player.audio_get_track()
-                if cur_track in (-1, 0):
-                    # tracks[0] is typically ('-1', 'Disable'), tracks[1] is active track
-                    self._player.audio_set_track(tracks[1][0])
+                if cur_track == -1:
+                    # -1 means disabled; find first active track ID
+                    for tid, tname in tracks:
+                        if tid != -1:
+                            self._player.audio_set_track(tid)
+                            break
         except Exception:
             pass
 
@@ -586,6 +614,8 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
     def _show_stopped_state(self) -> None:
         self._is_playing = False
         self._is_paused = False
+        self._current_mode = "live"
+        self._playing_file = None
         self.placeholder.configure(text="Camera stream is stopped")
         self.placeholder.place(relx=0.5, rely=0.5, anchor="center")
         self.live_dot.configure(text_color=TAPO_MUTED)
@@ -609,6 +639,7 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
             fg_color=TAPO_BLUE,
             hover_color=TAPO_BLUE_HOVER,
         )
+        self.btn_back_to_live.pack(side="left", padx=(4, 0))
         self._set_status("Ended", TAPO_MUTED)
 
     def _set_error_state(self, message: str) -> None:

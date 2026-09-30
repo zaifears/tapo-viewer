@@ -590,7 +590,7 @@ class TapoViewerApp(ctk.CTk):
     # =========================================================================
     def _build_dashboard_view(self):
         self.dashboard_view = ctk.CTkFrame(self.container, fg_color=TAPO_DARK_BG, corner_radius=0)
-        self.dashboard_view.grid_columnconfigure(0, weight=0, minsize=270)  # Left Sidebar
+        self.dashboard_view.grid_columnconfigure(0, weight=0, minsize=235)  # Left Sidebar
         self.dashboard_view.grid_columnconfigure(1, weight=1)               # Main Content Area
         self.dashboard_view.grid_rowconfigure(0, weight=1)
 
@@ -601,7 +601,7 @@ class TapoViewerApp(ctk.CTk):
             self.dashboard_view,
             corner_radius=0,
             fg_color=TAPO_SIDEBAR_BG,
-            width=270
+            width=235
         )
         self.sidebar_frame.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
 
@@ -736,17 +736,17 @@ class TapoViewerApp(ctk.CTk):
         # ---------------------------------------------------------------------
         self.main_frame = ctk.CTkFrame(self.dashboard_view, corner_radius=0, fg_color=TAPO_DARK_BG)
         self.main_frame.grid(row=0, column=1, sticky="nsew", padx=0, pady=0)
-        self.main_frame.grid_columnconfigure(0, weight=3, minsize=520)  # Left: Video Player Stage
-        self.main_frame.grid_columnconfigure(1, weight=2, minsize=370)  # Right: Recorded Clips List
+        self.main_frame.grid_columnconfigure(0, weight=3, minsize=480)  # Left: Video Player Stage
+        self.main_frame.grid_columnconfigure(1, weight=2, minsize=360)  # Right: Recorded Clips List
         self.main_frame.grid_rowconfigure(0, weight=1)
 
         # ---------------------------------------------------------------------
         # LEFT STAGE: Video Screen & Docked Download Manager
         # ---------------------------------------------------------------------
         self.left_stage = ctk.CTkFrame(self.main_frame, fg_color="transparent")
-        self.left_stage.grid(row=0, column=0, sticky="nsew", padx=(12, 6), pady=12)
-        self.left_stage.grid_rowconfigure(0, weight=1)
-        self.left_stage.grid_rowconfigure(1, weight=0)
+        self.left_stage.grid(row=0, column=0, sticky="nsew", padx=(8, 4), pady=8)
+        self.left_stage.grid_rowconfigure(0, weight=0)  # Video keeps its 16:9 ratio
+        self.left_stage.grid_rowconfigure(1, weight=1)
         self.left_stage.grid_columnconfigure(0, weight=1)
 
         # Embedded live video & recorded clips player
@@ -768,16 +768,16 @@ class TapoViewerApp(ctk.CTk):
             row=0,
             column=0,
             padx=0,
-            pady=(0, 8),
-            sticky="nsew",
+            pady=(0, 6),
+            sticky="ew",
         )
 
         # Bottom Download Tab: Permanently Docked under the video
         self.progress_panel = ctk.CTkFrame(self.left_stage, corner_radius=10, fg_color=TAPO_CARD_BG, height=80)
-        self.progress_panel.grid(row=1, column=0, sticky="ew", padx=0, pady=0)
+        self.progress_panel.grid(row=1, column=0, sticky="new", padx=0, pady=0)
 
         progress_inner = ctk.CTkFrame(self.progress_panel, fg_color="transparent")
-        progress_inner.pack(fill="both", expand=True, padx=14, pady=8)
+        progress_inner.pack(fill="both", expand=True, padx=12, pady=6)
 
         # Top row of download bar: Status + Actions + About Button
         bar_top = ctk.CTkFrame(progress_inner, fg_color="transparent")
@@ -786,7 +786,7 @@ class TapoViewerApp(ctk.CTk):
         self.lbl_download_title = ctk.CTkLabel(
             bar_top,
             text="📥 Download Manager (Idle)",
-            font=ctk.CTkFont(family=FONT_FAMILY, size=12, weight="bold"),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=11, weight="bold"),
             text_color="#FFFFFF"
         )
         self.lbl_download_title.pack(side="left")
@@ -798,7 +798,7 @@ class TapoViewerApp(ctk.CTk):
         self.btn_cancel_dl = ctk.CTkButton(
             bar_actions,
             text="Cancel",
-            width=60,
+            width=54,
             height=24,
             fg_color="#3A3D47",
             hover_color=TAPO_RED,
@@ -806,29 +806,29 @@ class TapoViewerApp(ctk.CTk):
             state="disabled",
             command=self._on_cancel_download
         )
-        self.btn_cancel_dl.pack(side="left", padx=(0, 6))
+        self.btn_cancel_dl.pack(side="left", padx=(0, 4))
 
         ctk.CTkButton(
             bar_actions,
-            text="📁 Change Folder...",
-            width=110,
+            text="📁 Folder...",
+            width=86,
             height=24,
             fg_color="#2B2D35",
             hover_color=TAPO_CARD_HOVER,
             font=ctk.CTkFont(family=FONT_FAMILY, size=11, weight="bold"),
             command=self._on_choose_folder
-        ).pack(side="left", padx=(0, 6))
+        ).pack(side="left", padx=(0, 4))
 
         ctk.CTkButton(
             bar_actions,
-            text="📂 Open Folder",
-            width=88,
+            text="📂 Open",
+            width=68,
             height=24,
             fg_color="#2B2D35",
             hover_color=TAPO_CARD_HOVER,
             font=ctk.CTkFont(family=FONT_FAMILY, size=11),
             command=self._on_open_recordings_folder
-        ).pack(side="left", padx=(0, 6))
+        ).pack(side="left", padx=(0, 4))
 
         # About Button
         ctk.CTkButton(
@@ -851,24 +851,75 @@ class TapoViewerApp(ctk.CTk):
         # RIGHT STAGE: Full-Height Content / Recorded Clips Playlist (YouTube style!)
         # ---------------------------------------------------------------------
         self.right_stage = ctk.CTkFrame(self.main_frame, fg_color="transparent")
-        self.right_stage.grid(row=0, column=1, sticky="nsew", padx=(6, 12), pady=12)
-        self.right_stage.grid_rowconfigure(3, weight=1)
+        self.right_stage.grid(row=0, column=1, sticky="nsew", padx=(4, 8), pady=8)
+        self.right_stage.grid_rowconfigure(0, weight=0)
+        self.right_stage.grid_rowconfigure(1, weight=0)
+        self.right_stage.grid_rowconfigure(2, weight=1)  # Playlist gets max vertical height!
+        self.right_stage.grid_rowconfigure(3, weight=0)  # Date bar pushed to bottom
         self.right_stage.grid_columnconfigure(0, weight=1)
 
-        # Row 0: Active Date Header & Quick Buttons
+        # Row 0: Summary Stats Header
+        self.stats_bar = ctk.CTkFrame(self.right_stage, fg_color="transparent")
+        self.stats_bar.grid(row=0, column=0, padx=4, pady=(0, 4), sticky="ew")
+
+        self.lbl_recordings_summary = ctk.CTkLabel(
+            self.stats_bar,
+            text="Detected Events",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12, weight="bold"),
+            text_color="#FFFFFF"
+        )
+        self.lbl_recordings_summary.pack(side="left")
+
+        self.lbl_total_duration = ctk.CTkLabel(
+            self.stats_bar,
+            text="",
+            font=ctk.CTkFont(family=FONT_FAMILY, size=11),
+            text_color=TAPO_TEXT_MUTED
+        )
+        self.lbl_total_duration.pack(side="right")
+
+        # Row 1: Segmented Filter (All / Motion / Continuous)
+        filter_bar = ctk.CTkFrame(self.right_stage, corner_radius=8, fg_color=TAPO_CARD_BG)
+        filter_bar.grid(row=1, column=0, padx=0, pady=(0, 6), sticky="ew")
+
+        f_inner = ctk.CTkFrame(filter_bar, fg_color="transparent")
+        f_inner.pack(fill="x", padx=8, pady=5)
+
+        ctk.CTkLabel(f_inner, text="Filter:", font=ctk.CTkFont(family=FONT_FAMILY, size=11), text_color=TAPO_TEXT_MUTED).pack(side="left", padx=(0, 6))
+        self.seg_filter = ctk.CTkSegmentedButton(
+            f_inner,
+            values=["All", "Motion", "Continuous"],
+            selected_color=TAPO_BLUE,
+            selected_hover_color=TAPO_BLUE_HOVER,
+            font=ctk.CTkFont(family=FONT_FAMILY, size=11),
+            height=26,
+            command=self._on_filter_changed
+        )
+        self.seg_filter.set("All")
+        self.seg_filter.pack(side="left", fill="x", expand=True)
+
+        # Row 2: Full-Height Scrollable Recordings Feed
+        self.scroll_recordings = ctk.CTkScrollableFrame(
+            self.right_stage,
+            corner_radius=10,
+            fg_color=TAPO_CARD_BG
+        )
+        self.scroll_recordings.grid(row=2, column=0, padx=0, pady=(0, 6), sticky="nsew")
+
+        # Row 3 (BOTTOM): Active Date Selector & Refresh SD Card Button
         self.header_frame = ctk.CTkFrame(self.right_stage, corner_radius=10, fg_color=TAPO_CARD_BG)
-        self.header_frame.grid(row=0, column=0, padx=0, pady=(0, 6), sticky="ew")
+        self.header_frame.grid(row=3, column=0, padx=0, pady=0, sticky="ew")
 
         date_box = ctk.CTkFrame(self.header_frame, fg_color="transparent")
-        date_box.pack(side="left", padx=10, pady=8)
+        date_box.pack(side="left", padx=8, pady=6)
 
         self.lbl_active_date = ctk.CTkLabel(
             date_box,
             text=f"📅 {self.selected_date}",
-            font=ctk.CTkFont(family=FONT_FAMILY, size=13, weight="bold"),
+            font=ctk.CTkFont(family=FONT_FAMILY, size=12, weight="bold"),
             text_color="#FFFFFF"
         )
-        self.lbl_active_date.pack(side="left", padx=(0, 8))
+        self.lbl_active_date.pack(side="left", padx=(0, 6))
 
         ctk.CTkButton(
             date_box,
@@ -890,67 +941,19 @@ class TapoViewerApp(ctk.CTk):
             hover_color=TAPO_CARD_HOVER,
             font=ctk.CTkFont(family=FONT_FAMILY, size=11),
             command=lambda: self._select_date((datetime.date.today() - datetime.timedelta(days=1)).strftime("%Y-%m-%d"))
-        ).pack(side="left", padx=(0, 6))
+        ).pack(side="left", padx=(0, 4))
 
         self.btn_refresh = ctk.CTkButton(
             self.header_frame,
-            text="🔄 Refresh",
-            width=80,
+            text="🔄 Refresh SD",
+            width=115,
             height=26,
             fg_color=TAPO_BLUE,
             hover_color=TAPO_BLUE_HOVER,
             font=ctk.CTkFont(family=FONT_FAMILY, size=11, weight="bold"),
             command=self._on_refresh_sd_clicked
         )
-        self.btn_refresh.pack(side="right", padx=10, pady=8)
-
-        # Row 1: Segmented Filter
-        filter_bar = ctk.CTkFrame(self.right_stage, corner_radius=8, fg_color=TAPO_CARD_BG)
-        filter_bar.grid(row=1, column=0, padx=0, pady=(0, 6), sticky="ew")
-
-        f_inner = ctk.CTkFrame(filter_bar, fg_color="transparent")
-        f_inner.pack(fill="x", padx=10, pady=6)
-
-        ctk.CTkLabel(f_inner, text="Filter:", font=ctk.CTkFont(family=FONT_FAMILY, size=11), text_color=TAPO_TEXT_MUTED).pack(side="left", padx=(0, 6))
-        self.seg_filter = ctk.CTkSegmentedButton(
-            f_inner,
-            values=["All", "Motion", "Continuous"],
-            selected_color=TAPO_BLUE,
-            selected_hover_color=TAPO_BLUE_HOVER,
-            font=ctk.CTkFont(family=FONT_FAMILY, size=11),
-            height=26,
-            command=self._on_filter_changed
-        )
-        self.seg_filter.set("All")
-        self.seg_filter.pack(side="left", fill="x", expand=True)
-
-        # Row 2: Summary Stats
-        self.stats_bar = ctk.CTkFrame(self.right_stage, fg_color="transparent")
-        self.stats_bar.grid(row=2, column=0, padx=4, pady=(0, 4), sticky="ew")
-
-        self.lbl_recordings_summary = ctk.CTkLabel(
-            self.stats_bar,
-            text="Detected Events",
-            font=ctk.CTkFont(family=FONT_FAMILY, size=12, weight="bold"),
-            text_color="#FFFFFF"
-        )
-        self.lbl_recordings_summary.pack(side="left")
-
-        self.lbl_total_duration = ctk.CTkLabel(
-            self.stats_bar,
-            text="",
-            font=ctk.CTkFont(family=FONT_FAMILY, size=11),
-            text_color=TAPO_TEXT_MUTED
-        )
-        self.lbl_total_duration.pack(side="right")
-
-        # Row 3: Full-Height Scrollable Recordings Area
-        self.scroll_recordings = ctk.CTkScrollableFrame(
-            self.right_stage,
-            corner_radius=10,
-            fg_color=TAPO_CARD_BG
-        )
-        self.scroll_recordings.grid(row=3, column=0, padx=0, pady=0, sticky="nsew")
+        self.btn_refresh.pack(side="right", padx=8, pady=6)
 
     # =========================================================================
     # CONNECTION LOGIC & TRANSITION TO DASHBOARD
@@ -1154,6 +1157,7 @@ class TapoViewerApp(ctk.CTk):
 
     def _on_launch_live_stream(self):
         try:
+            self.auto_play_target = None
             quality = self.config.get(
                 "live_stream_quality",
                 "HD",
@@ -1261,7 +1265,7 @@ class TapoViewerApp(ctk.CTk):
             except Exception as e:
                 self.after(0, lambda: self._show_error_dialog("ERR_REFRESH_FAILED", "Refresh Failed", f"Could not refresh SD card: {e}"))
             finally:
-                self.after(0, lambda: self.btn_refresh.configure(state="normal", text="🔄 Refresh SD Card"))
+                self.after(0, lambda: self.btn_refresh.configure(state="normal", text="🔄 Refresh SD"))
 
         threading.Thread(target=_worker, daemon=True).start()
 
@@ -1507,18 +1511,31 @@ class TapoViewerApp(ctk.CTk):
         )
         btn_play.pack(side="left", padx=(0, 4))
 
-        dl_text = "⬇" if not rec["is_downloaded"] else "⬇ Re"
-        btn_dl = ctk.CTkButton(
-            action_frame,
-            text=dl_text,
-            width=36 if not rec["is_downloaded"] else 46,
-            height=28,
-            font=ctk.CTkFont(family=FONT_FAMILY, size=11),
-            fg_color="#2B2D35",
-            hover_color=TAPO_CARD_HOVER,
-            corner_radius=5,
-            command=lambda r=rec: self._on_download_clicked(r)
-        )
+        if rec["is_downloaded"]:
+            btn_dl = ctk.CTkButton(
+                action_frame,
+                text="✓ Saved",
+                width=66,
+                height=28,
+                font=ctk.CTkFont(family=FONT_FAMILY, size=10, weight="bold"),
+                fg_color="#183824",
+                hover_color="#235235",
+                text_color="#2ECC71",
+                corner_radius=5,
+                command=lambda r=rec: self._on_download_clicked(r)
+            )
+        else:
+            btn_dl = ctk.CTkButton(
+                action_frame,
+                text="Download",
+                width=76,
+                height=28,
+                font=ctk.CTkFont(family=FONT_FAMILY, size=10, weight="bold"),
+                fg_color="#2B2D35",
+                hover_color=TAPO_CARD_HOVER,
+                corner_radius=5,
+                command=lambda r=rec: self._on_download_clicked(r)
+            )
         btn_dl.pack(side="left")
 
     def _show_empty_placeholder(self, text: str):

@@ -42,9 +42,12 @@ class AboutDialog(ctk.CTkToplevel):
             pass
 
         self._build_ui()
+        self.bind("<MouseWheel>", self._on_mousewheel)
+        self.after(50, lambda: self._bind_mousewheel_recursive(self))
 
     def _build_ui(self):
-        container = ctk.CTkScrollableFrame(self, fg_color="transparent", corner_radius=0)
+        self.container = ctk.CTkScrollableFrame(self, fg_color="transparent", corner_radius=0)
+        container = self.container
         container.pack(fill="both", expand=True, padx=20, pady=20)
 
         # Header with Logo + Title
@@ -334,3 +337,20 @@ class AboutDialog(ctk.CTkToplevel):
             child.bind("<Button-1>", lambda e: webbrowser.open(url))
             for sub in child.winfo_children():
                 sub.bind("<Button-1>", lambda e: webbrowser.open(url))
+
+    def _on_mousewheel(self, event):
+        try:
+            if hasattr(self, "container") and hasattr(self.container, "_parent_canvas"):
+                delta = int(-1 * (event.delta / 120))
+                self.container._parent_canvas.yview_scroll(delta, "units")
+        except Exception:
+            pass
+
+    def _bind_mousewheel_recursive(self, widget):
+        try:
+            widget.bind("<MouseWheel>", self._on_mousewheel, add="+")
+        except Exception:
+            pass
+        for child in widget.winfo_children():
+            self._bind_mousewheel_recursive(child)
+
