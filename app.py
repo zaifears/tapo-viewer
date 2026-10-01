@@ -19,6 +19,7 @@ from camera_backend import CameraBackend
 from tapo_calendar import TapoCalendar
 from about_dialog import AboutDialog
 from embedded_player import EmbeddedVLCPlayer
+from runtime_paths import prepare_vlc_environment
 
 # =============================================================================
 # TAPO-VIEWER DESIGN SYSTEM & PALETTE (Operate Mode, Segoe UI)
@@ -47,6 +48,12 @@ class TapoViewerApp(ctk.CTk):
         self.geometry("1260x840")
         self.minsize(980, 600)
         self.configure(fg_color=TAPO_DARK_BG)
+
+        # Configure LibVLC discovery and environment early
+        try:
+            prepare_vlc_environment()
+        except Exception:
+            pass
 
         # Set Window Icon
         try:

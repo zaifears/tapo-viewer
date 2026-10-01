@@ -127,11 +127,17 @@ def vlc_runtime_dir() -> Optional[Path]:
     """
     Resolve bundled LibVLC or an installed VLC runtime.
     """
+    # 1. Bundled in vendor/vlc (standard bundle layout)
     bundled = resource_path("vendor", "vlc")
-
     if (bundled / "libvlc.dll").is_file():
         return bundled
 
+    # 2. Bundled at root of bundle
+    root_bundled = bundle_dir()
+    if (root_bundled / "libvlc.dll").is_file():
+        return root_bundled
+
+    # 3. System installed VLC
     if os.name == "nt":
         candidates = [
             Path(os.environ.get("PROGRAMFILES", "")) / "VideoLAN" / "VLC",
@@ -145,9 +151,35 @@ def vlc_runtime_dir() -> Optional[Path]:
     return None
 
 
+def vlc_plugins_dir(runtime: Optional[Path] = None) -> Optional[Path]:
+    """
+    Locate the VLC plugins directory for the active runtime.
+    """
+    if runtime is None:
+        runtime = vlc_runtime_dir()
+
+    if runtime:
+        candidate = runtime / "plugins"
+        if candidate.is_dir():
+            return candidate
+
+    # Check bundle vendor/vlc/plugins
+    bundled = resource_path("vendor", "vlc", "plugins")
+    if bundled.is_dir():
+        return bundled
+
+    # Check bundle root plugins
+    root_bundled = bundle_dir() / "plugins"
+    if root_bundled.is_dir():
+        return root_bundled
+
+    return None
+
+
 def prepare_vlc_environment() -> Path:
     """
     Configure DLL and plugin discovery before importing vlc.
+    Explicitly synchronizes python-vlc, C runtime, and Win32 process environments.
     """
     runtime = vlc_runtime_dir()
 
@@ -157,18 +189,55 @@ def prepare_vlc_environment() -> Path:
             "may be incomplete. Reinstall Tapo-Viewer or install VLC."
         )
 
-    plugin_dir = runtime / "plugins"
+    libvlc_dll = runtime / "libvlc.dll"
+    libvlccore_dll = runtime / "libvlccore.dll"
+    plugin_dir = vlc_plugins_dir(runtime)
 
-    if plugin_dir.is_dir():
-        os.environ["VLC_PLUGIN_PATH"] = str(plugin_dir)
+    if not libvlc_dll.is_file():
+        raise RuntimeError(
+            f"LibVLC library file not found: {libvlc_dll}"
+        )
 
+    # 1. Explicitly inform python-vlc module of library and module paths
+    dll_path_str = str(libvlc_dll.resolve())
+    os.environ["PYTHON_VLC_LIB_PATH"] = dll_path_str
+    if plugin_dir:
+        plugin_path_str = str(plugin_dir.resolve())
+        os.environ["PYTHON_VLC_MODULE_PATH"] = plugin_path_str
+        os.environ["VLC_PLUGIN_PATH"] = plugin_path_str
+
+    # 2. Synchronize Win32 process environment variables so C/C++ runtime reads them
+    if os.name == "nt":
+        try:
+            import ctypes
+            set_env = ctypes.windll.kernel32.SetEnvironmentVariableW
+            set_env("PYTHON_VLC_LIB_PATH", dll_path_str)
+            if plugin_dir:
+                set_env("PYTHON_VLC_MODULE_PATH", plugin_path_str)
+                set_env("VLC_PLUGIN_PATH", plugin_path_str)
+        except Exception:
+            pass
+
+    # 3. Add runtime to PATH
     current_path = os.environ.get("PATH", "")
-    os.environ["PATH"] = f"{runtime}{os.pathsep}{current_path}"
+    os.environ["PATH"] = f"{runtime.resolve()}{os.pathsep}{current_path}"
 
-    if os.name == "nt" and hasattr(os, "add_dll_directory"):
-        # Keep the returned handle alive for the lifetime of the process.
-        global _VLC_DLL_HANDLE
-        _VLC_DLL_HANDLE = os.add_dll_directory(str(runtime))
+    # 4. Windows DLL directory and pre-loading
+    if os.name == "nt":
+        if hasattr(os, "add_dll_directory"):
+            global _VLC_DLL_HANDLE
+            try:
+                _VLC_DLL_HANDLE = os.add_dll_directory(str(runtime.resolve()))
+            except Exception:
+                pass
+
+        try:
+            import ctypes
+            if libvlccore_dll.is_file():
+                ctypes.CDLL(str(libvlccore_dll.resolve()))
+            ctypes.CDLL(dll_path_str)
+        except Exception:
+            pass
 
     return runtime
 

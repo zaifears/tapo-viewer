@@ -299,14 +299,14 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
 
     def _initialize_vlc(self) -> None:
         try:
-            prepare_vlc_environment()
+            runtime = prepare_vlc_environment()
 
             import vlc
 
             self._vlc = vlc
-            # Disabling mouse/keyboard events on LibVLC HWND stops it from
-            # intercepting clicks and causing Tkinter window activation delays.
-            self._instance = vlc.Instance(
+            plugin_dir = runtime / "plugins"
+
+            vlc_args = [
                 "--no-video-title-show",
                 "--no-osd",
                 "--rtsp-tcp",
@@ -315,8 +315,41 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
                 "--no-mouse-events",
                 "--no-keyboard-events",
                 "--audio",
-            )
+            ]
+
+            # 1. Primary instance initialization
+            self._instance = vlc.Instance(*vlc_args)
+
+            # 2. Resilient fallback: minimal flags
+            if self._instance is None:
+                fallback_args = [
+                    "--quiet",
+                    "--no-video-title-show",
+                    "--no-osd",
+                    "--audio",
+                ]
+                self._instance = vlc.Instance(*fallback_args)
+
+            # 3. Minimal fallback without custom options
+            if self._instance is None:
+                self._instance = vlc.Instance()
+
+            if self._instance is None:
+                err_detail = ""
+                try:
+                    raw_err = vlc.libvlc_errmsg()
+                    if raw_err:
+                        err_detail = f": {raw_err.decode('utf-8', errors='replace')}"
+                except Exception:
+                    pass
+                raise RuntimeError(
+                    f"LibVLC engine failed to initialize{err_detail}. "
+                    "Confirm that the bundled LibVLC runtime and codecs are present."
+                )
+
             self._player = self._instance.media_player_new()
+            if self._player is None:
+                raise RuntimeError("LibVLC failed to create media player instance.")
             self._events = self._player.event_manager()
 
             self._events.event_attach(
