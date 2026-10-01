@@ -65,6 +65,7 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
         self._current_mode: str = "live"  # "live" or "replay"
         self._is_playing = False
         self._is_paused = False
+        self._is_changing_media = False
         self._muted = bool(initially_muted)
         self._volume = max(0, min(100, int(initial_volume)))
         self._initialization_error: Optional[str] = None
@@ -379,7 +380,8 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
             self._player.audio_set_volume(self._volume)
             self._player.audio_set_mute(self._muted)
 
-            self._set_status("Ready", TAPO_MUTED)
+            if not self._is_playing and not self._playing_file:
+                self._set_status("Ready", TAPO_MUTED)
 
         except Exception as exc:
             self._initialization_error = str(exc)
@@ -397,6 +399,9 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
         else:
             self._player.set_xwindow(window_id)
 
+    def _finish_media_change(self) -> None:
+        self._is_changing_media = False
+
     def play_url(self, stream_url: str) -> None:
         if not stream_url:
             raise ValueError("The RTSP stream URL is empty.")
@@ -408,6 +413,7 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
             raise RuntimeError("Embedded player has not finished initializing.")
 
         with self._operation_lock:
+            self._is_changing_media = True
             self._current_mode = "live"
             self._current_url = stream_url
             self._playing_file = None
@@ -427,12 +433,15 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
             result = self._player.play()
 
             if result == -1:
+                self._is_changing_media = False
                 raise RuntimeError("LibVLC rejected the RTSP stream.")
 
             self.title_label.configure(text="Live Camera")
+            self.live_dot.configure(text="●", text_color=TAPO_BLUE)
             self.btn_back_to_live.pack_forget()
             self.placeholder.place_forget()
             self._set_status("Connecting...", TAPO_BLUE)
+            self.after(500, self._finish_media_change)
 
     def play_file(self, file_path: str) -> None:
         if not os.path.isfile(file_path):
@@ -442,6 +451,7 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
             raise RuntimeError("Embedded player has not finished initializing.")
 
         with self._operation_lock:
+            self._is_changing_media = True
             self._current_mode = "replay"
             self._playing_file = file_path
             abs_path = os.path.abspath(file_path)
@@ -455,13 +465,17 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
             self._player.audio_set_mute(self._muted)
 
             if self._player.play() == -1:
+                self._is_changing_media = False
                 raise RuntimeError("LibVLC could not open the selected file.")
 
             file_name = os.path.basename(file_path)
-            self.title_label.configure(text=f"Clip: {file_name}")
+            display_name = file_name if len(file_name) <= 34 else file_name[:31] + "..."
+            self.title_label.configure(text=f"Clip: {display_name}")
+            self.live_dot.configure(text="🎬", text_color=TAPO_BLUE)
             self.btn_back_to_live.pack(side="left", padx=(4, 0))
             self.placeholder.place_forget()
             self._set_status("Playing clip", TAPO_BLUE)
+            self.after(500, self._finish_media_change)
 
     def toggle_play_pause(self) -> None:
         if self._player is None:
@@ -483,25 +497,11 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
             # Currently Playing: Pause
             if state == self._vlc.State.Playing:
                 self._player.pause()
-                self._is_paused = True
-                self.play_button.configure(
-                    text="▶ Resume",
-                    fg_color=TAPO_BLUE,
-                    hover_color=TAPO_BLUE_HOVER,
-                )
-                self.live_dot.configure(text_color=TAPO_AMBER)
-                self._set_status("Paused", TAPO_AMBER)
+                self._set_paused_state()
             # Paused: Resume
             else:
                 self._player.play()
-                self._is_paused = False
-                self.play_button.configure(
-                    text="⏸ Pause",
-                    fg_color="#343740",
-                    hover_color="#454955",
-                )
-                self.live_dot.configure(text_color=TAPO_GREEN)
-                self._set_status("Live" if self._current_mode == "live" else "Playing", TAPO_GREEN)
+                self._set_playing_state()
 
     def stop(self) -> None:
         if self._player is None:
@@ -511,8 +511,6 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
             self._player.stop()
             self._is_playing = False
             self._is_paused = False
-            self._current_mode = "live"
-            self._playing_file = None
             self._show_stopped_state()
 
     def toggle_mute(self) -> None:
@@ -562,16 +560,22 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
 
     def _on_back_to_live_clicked(self) -> None:
         with self._operation_lock:
+            self._is_changing_media = True
             if self._player is not None:
                 self._player.stop()
             self._playing_file = None
             self._current_mode = "live"
             self.btn_back_to_live.pack_forget()
             self.title_label.configure(text="Live Camera")
+            self.live_dot.configure(text="●", text_color=TAPO_MUTED)
+            self.placeholder.configure(text="Connecting to live stream...")
+            self.placeholder.place(relx=0.5, rely=0.5, anchor="center")
+            self._set_status("Switching to live...", TAPO_BLUE)
             if self.live_callback:
                 self.live_callback()
             elif self._current_url:
                 self.play_url(self._current_url)
+            self.after(500, self._finish_media_change)
 
     def _on_external_clicked(self) -> None:
         if self.external_callback:
@@ -585,6 +589,8 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
         self.after(0, self._set_paused_state)
 
     def _on_vlc_stopped(self, _event) -> None:
+        if getattr(self, "_is_changing_media", False):
+            return
         self.after(0, self._show_stopped_state)
 
     def _on_vlc_ended(self, _event) -> None:
@@ -594,7 +600,7 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
         self.after(
             0,
             lambda: self._set_error_state(
-                "Stream unavailable or authentication failed."
+                "Stream unavailable or playback error."
             ),
         )
 
@@ -602,15 +608,26 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
         self._is_playing = True
         self._is_paused = False
         self.placeholder.place_forget()
-        self.live_dot.configure(text_color=TAPO_GREEN)
         self.play_button.configure(
             text="⏸ Pause",
             fg_color="#343740",
             hover_color="#454955",
         )
-        self._set_status("Live" if self._current_mode == "live" else "Playing Clip", TAPO_GREEN)
 
-        # Staged checks to guarantee un-muting once RTSP track SDP negotiation completes
+        if self._current_mode == "replay":
+            file_name = os.path.basename(self._playing_file) if self._playing_file else "Recording"
+            display_name = file_name if len(file_name) <= 34 else file_name[:31] + "..."
+            self.live_dot.configure(text="🎬", text_color=TAPO_BLUE)
+            self.title_label.configure(text=f"Clip: {display_name}")
+            self.btn_back_to_live.pack(side="left", padx=(4, 0))
+            self._set_status("Playing Clip", TAPO_BLUE)
+        else:
+            self.live_dot.configure(text="●", text_color=TAPO_GREEN)
+            self.title_label.configure(text="Live Camera")
+            self.btn_back_to_live.pack_forget()
+            self._set_status("Live", TAPO_GREEN)
+
+        # Staged checks to guarantee un-muting once audio track negotiation completes
         for delay in (250, 750, 1500, 3000):
             self.after(delay, self._ensure_audio_pipeline)
 
@@ -636,44 +653,80 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
 
     def _set_paused_state(self) -> None:
         self._is_paused = True
-        self.live_dot.configure(text_color=TAPO_AMBER)
         self.play_button.configure(
             text="▶ Resume",
             fg_color=TAPO_BLUE,
             hover_color=TAPO_BLUE_HOVER,
         )
-        self._set_status("Paused", TAPO_AMBER)
+
+        if self._current_mode == "replay":
+            file_name = os.path.basename(self._playing_file) if self._playing_file else "Recording"
+            display_name = file_name if len(file_name) <= 34 else file_name[:31] + "..."
+            self.live_dot.configure(text="⏸", text_color=TAPO_AMBER)
+            self.title_label.configure(text=f"Clip: {display_name}")
+            self.btn_back_to_live.pack(side="left", padx=(4, 0))
+            self._set_status("Clip Paused", TAPO_AMBER)
+        else:
+            self.live_dot.configure(text="●", text_color=TAPO_AMBER)
+            self.title_label.configure(text="Live Camera")
+            self.btn_back_to_live.pack_forget()
+            self._set_status("Paused", TAPO_AMBER)
 
     def _show_stopped_state(self) -> None:
+        if getattr(self, "_is_changing_media", False):
+            return
+
         self._is_playing = False
         self._is_paused = False
-        self._current_mode = "live"
-        self._playing_file = None
-        self.placeholder.configure(text="Camera stream is stopped")
-        self.placeholder.place(relx=0.5, rely=0.5, anchor="center")
-        self.live_dot.configure(text_color=TAPO_MUTED)
-        self.play_button.configure(
-            text="▶ Start Live",
-            fg_color=TAPO_BLUE,
-            hover_color=TAPO_BLUE_HOVER,
-        )
-        self.title_label.configure(text="Live Camera")
-        self.btn_back_to_live.pack_forget()
-        self._set_status("Stopped", TAPO_MUTED)
+
+        if self._current_mode == "replay":
+            file_name = os.path.basename(self._playing_file) if self._playing_file else "Recording"
+            display_name = file_name if len(file_name) <= 34 else file_name[:31] + "..."
+            self.placeholder.configure(text=f"Clip playback stopped: {display_name}")
+            self.placeholder.place(relx=0.5, rely=0.5, anchor="center")
+            self.live_dot.configure(text="■", text_color=TAPO_MUTED)
+            self.play_button.configure(
+                text="▶ Play",
+                fg_color=TAPO_BLUE,
+                hover_color=TAPO_BLUE_HOVER,
+            )
+            self.title_label.configure(text=f"Clip: {display_name}")
+            self.btn_back_to_live.pack(side="left", padx=(4, 0))
+            self._set_status("Stopped", TAPO_MUTED)
+        else:
+            self._playing_file = None
+            self.placeholder.configure(text="Camera stream is stopped")
+            self.placeholder.place(relx=0.5, rely=0.5, anchor="center")
+            self.live_dot.configure(text="●", text_color=TAPO_MUTED)
+            self.play_button.configure(
+                text="▶ Start Live",
+                fg_color=TAPO_BLUE,
+                hover_color=TAPO_BLUE_HOVER,
+            )
+            self.title_label.configure(text="Live Camera")
+            self.btn_back_to_live.pack_forget()
+            self._set_status("Stopped", TAPO_MUTED)
 
     def _on_playback_ended(self) -> None:
         self._is_playing = False
         self._is_paused = False
-        self.placeholder.configure(text="Clip playback finished")
-        self.placeholder.place(relx=0.5, rely=0.5, anchor="center")
-        self.live_dot.configure(text_color=TAPO_MUTED)
-        self.play_button.configure(
-            text="▶ Replay",
-            fg_color=TAPO_BLUE,
-            hover_color=TAPO_BLUE_HOVER,
-        )
-        self.btn_back_to_live.pack(side="left", padx=(4, 0))
-        self._set_status("Ended", TAPO_MUTED)
+
+        if self._current_mode == "replay":
+            file_name = os.path.basename(self._playing_file) if self._playing_file else "Recording"
+            display_name = file_name if len(file_name) <= 34 else file_name[:31] + "..."
+            self.placeholder.configure(text="Clip playback finished")
+            self.placeholder.place(relx=0.5, rely=0.5, anchor="center")
+            self.live_dot.configure(text="■", text_color=TAPO_MUTED)
+            self.play_button.configure(
+                text="▶ Replay",
+                fg_color=TAPO_BLUE,
+                hover_color=TAPO_BLUE_HOVER,
+            )
+            self.title_label.configure(text=f"Clip: {display_name}")
+            self.btn_back_to_live.pack(side="left", padx=(4, 0))
+            self._set_status("Ended", TAPO_MUTED)
+        else:
+            self._show_stopped_state()
 
     def _set_error_state(self, message: str) -> None:
         self._is_playing = False
@@ -681,11 +734,21 @@ class EmbeddedVLCPlayer(ctk.CTkFrame):
         self.placeholder.configure(text=message)
         self.placeholder.place(relx=0.5, rely=0.5, anchor="center")
         self.live_dot.configure(text_color=TAPO_RED)
-        self.play_button.configure(
-            text="Retry Live",
-            fg_color=TAPO_BLUE,
-            hover_color=TAPO_BLUE_HOVER,
-        )
+
+        if self._current_mode == "replay":
+            self.play_button.configure(
+                text="▶ Retry Clip",
+                fg_color=TAPO_BLUE,
+                hover_color=TAPO_BLUE_HOVER,
+            )
+            self.btn_back_to_live.pack(side="left", padx=(4, 0))
+        else:
+            self.play_button.configure(
+                text="▶ Retry Live",
+                fg_color=TAPO_BLUE,
+                hover_color=TAPO_BLUE_HOVER,
+            )
+            self.btn_back_to_live.pack_forget()
         self._set_status("Playback error", TAPO_RED)
 
     def _set_status(self, text: str, color: str) -> None:
