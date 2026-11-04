@@ -75,7 +75,7 @@ class AboutDialog(ctk.CTkToplevel):
 
         ctk.CTkLabel(
             title_box,
-            text="v1.1.1 Desktop Edition",
+            text="v1.1.2 Desktop Edition",
             font=ctk.CTkFont(family=FONT_FAMILY, size=12, weight="bold"),
             text_color=TAPO_BLUE
         ).pack(anchor="w")
