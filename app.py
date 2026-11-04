@@ -19,6 +19,19 @@ from camera_backend import CameraBackend
 from tapo_calendar import TapoCalendar
 from about_dialog import AboutDialog
 from embedded_player import EmbeddedVLCPlayer
+from errors import (
+    diagnose,
+    Diagnosis,
+    CTX_CONNECT,
+    CTX_REFRESH,
+    CTX_RECORDINGS,
+    CTX_DOWNLOAD,
+    CTX_PLAYBACK,
+    CTX_LIVE,
+    CTX_EXTERNAL_PLAYER,
+    CTX_STORAGE,
+    CTX_CREDENTIALS,
+)
 from runtime_paths import prepare_vlc_environment
 
 # =============================================================================
@@ -38,6 +51,11 @@ FONT_FAMILY = "Segoe UI"
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
+
+
+def _tech_text(exc: BaseException) -> str:
+    msg = str(exc).strip()
+    return f"{type(exc).__name__}: {msg}" if msg else type(exc).__name__
 
 
 class TapoViewerApp(ctk.CTk):
@@ -1039,8 +1057,8 @@ class TapoViewerApp(ctk.CTk):
                 dates = self.backend.get_dates_with_recordings()
                 self.after(0, lambda: self._on_connect_success(host, user, password, cloud_pass, cloud_info, dates))
             except Exception as e:
-                err_str = str(e)
-                self.after(0, lambda: self._on_connect_failed("ERR_CONNECT_FAILED", f"Connection failed: {err_str}"))
+                diag = diagnose(e, CTX_CONNECT)
+                self.after(0, lambda: self._on_connect_failed(diag))
 
         threading.Thread(target=_worker, daemon=True).start()
 
@@ -1075,13 +1093,17 @@ class TapoViewerApp(ctk.CTk):
             self.config["save_credentials"] = False
             save_config(self.config)
 
-            self._show_error_dialog(
-                "ERR_CREDENTIAL_STORE",
-                "Credential Storage Error",
-                "The camera connection succeeded, but Windows "
-                f"Credential Manager could not update the saved "
-                f"credentials.\n\n{exc}",
-            )
+            diag = diagnose(exc, CTX_CREDENTIALS)
+            self._show_diagnosis(Diagnosis(
+                diag.code,
+                diag.title,
+                "The camera connection succeeded, but your password could not be "
+                "saved/removed in Windows Credential Manager. You are connected "
+                "and can keep using the app.",
+                diag.causes,
+                diag.steps,
+                diag.technical,
+            ))
 
         save_config(self.config)
 
@@ -1112,11 +1134,13 @@ class TapoViewerApp(ctk.CTk):
         # Auto-launch embedded live stream feed
         self.after(350, self._on_launch_live_stream)
 
-    def _on_connect_failed(self, code: str, msg: str):
+    def _on_connect_failed(self, diag: Diagnosis):
         self.login_progress.stop()
         self.login_progress.pack_forget()
         self.btn_connect.configure(state="normal", text="⚡ Connect Camera")
-        self._show_login_status(f"[{code}] {msg}", is_error=True)
+        # Short summary stays on the login card; full cause/fix steps go in a dialog.
+        self._show_login_status(diag.short(), is_error=True)
+        self._show_diagnosis(diag)
 
     def _show_login_status(self, msg: str, is_error: bool = False):
         color = TAPO_RED if is_error else TAPO_BLUE
@@ -1215,16 +1239,7 @@ class TapoViewerApp(ctk.CTk):
             self.live_player.play_url(stream_url)
 
         except Exception as exc:
-            self._show_error_dialog(
-                "ERR_EMBEDDED_PLAYER",
-                "Live Stream Error",
-                f"Could not start the embedded live stream:\n\n{exc}",
-                action=(
-                    "Confirm that the camera is connected, RTSP is enabled, "
-                    "and the bundled LibVLC runtime is present. You can also "
-                    "use the external-player fallback."
-                ),
-            )
+            self._show_diagnosis(diagnose(exc, CTX_LIVE))
 
     def _on_launch_live_stream_external(self):
         try:
@@ -1242,11 +1257,7 @@ class TapoViewerApp(ctk.CTk):
             )
 
         except Exception as exc:
-            self._show_error_dialog(
-                "ERR_EXTERNAL_PLAYER",
-                "External Player Error",
-                f"Could not launch an external player:\n\n{exc}",
-            )
+            self._show_diagnosis(diagnose(exc, CTX_EXTERNAL_PLAYER))
 
     def _on_live_quality_changed(self, quality: str):
         self.config["live_stream_quality"] = quality
@@ -1259,11 +1270,7 @@ class TapoViewerApp(ctk.CTk):
                 )
                 self.live_player.play_url(stream_url)
             except Exception as exc:
-                self._show_error_dialog(
-                    "ERR_STREAM_QUALITY",
-                    "Stream Quality Error",
-                    f"Could not switch to {quality} quality:\n\n{exc}",
-                )
+                self._show_diagnosis(diagnose(exc, CTX_LIVE))
 
     def _on_live_player_status(
         self,
@@ -1298,7 +1305,7 @@ class TapoViewerApp(ctk.CTk):
 
     def _on_refresh_sd_clicked(self):
         if not self.backend.is_cloud_connected:
-            self._show_error_dialog("ERR_NOT_CONNECTED", "Camera Disconnected", "Please connect to the camera first.")
+            self._show_diagnosis(diagnose("Camera is not connected", CTX_LIVE))
             return
 
         self.btn_refresh.configure(state="disabled", text="⏳ Refreshing...")
@@ -1310,7 +1317,8 @@ class TapoViewerApp(ctk.CTk):
                 self.after(0, lambda: self.calendar_widget.set_recording_dates(dates))
                 self.after(0, lambda: self._load_recordings_for_date(self.selected_date))
             except Exception as e:
-                self.after(0, lambda: self._show_error_dialog("ERR_REFRESH_FAILED", "Refresh Failed", f"Could not refresh SD card: {e}"))
+                diag = diagnose(e, CTX_REFRESH)
+                self.after(0, lambda: self._show_diagnosis(diag))
             finally:
                 self.after(0, lambda: self.btn_refresh.configure(state="normal", text="🔄 Refresh SD"))
 
@@ -1362,8 +1370,8 @@ class TapoViewerApp(ctk.CTk):
                 recs = self.backend.get_recordings(date_str, output_dir=output_dir)
                 self.after(0, lambda: self._on_recordings_loaded(recs))
             except Exception as e:
-                err_msg = str(e)
-                self.after(0, lambda: self._on_recordings_load_failed(err_msg))
+                diag = diagnose(e, CTX_RECORDINGS)
+                self.after(0, lambda: self._on_recordings_load_failed(diag))
 
         threading.Thread(target=_worker, daemon=True).start()
 
@@ -1371,8 +1379,12 @@ class TapoViewerApp(ctk.CTk):
         self.all_recordings = recs
         self._apply_filter_and_render(reset_pagination=True)
 
-    def _on_recordings_load_failed(self, err_msg: str):
-        self._show_empty_placeholder(f"Could not load recordings for this date.\n\nError: {err_msg}")
+    def _on_recordings_load_failed(self, diag: Diagnosis):
+        # Inline (non-blocking) because this fires on every date change.
+        lines = [f"[{diag.code}] {diag.title}", "", diag.summary]
+        if diag.steps:
+            lines += ["", "How to fix it:"] + [f"{i}. {s}" for i, s in enumerate(diag.steps[:3], 1)]
+        self._show_empty_placeholder("\n".join(lines))
         self.lbl_recordings_summary.configure(text="Error loading events")
 
     def _on_filter_changed(self, value: str):
@@ -1624,14 +1636,17 @@ class TapoViewerApp(ctk.CTk):
                     )
 
                 except Exception as external_error:
-                    self._show_error_dialog(
-                        "ERR_PLAYBACK",
-                        "Playback Error",
-                        "Neither the embedded player nor the external "
-                        "fallback could open the recording.\n\n"
-                        f"Embedded player: {embedded_error}\n"
-                        f"External player: {external_error}",
-                    )
+                    diag = diagnose(embedded_error, CTX_PLAYBACK)
+                    self._show_diagnosis(Diagnosis(
+                        diag.code,
+                        diag.title,
+                        "Neither the built-in player nor an external player could "
+                        "open this recording.\n\n" + diag.summary,
+                        diag.causes,
+                        diag.steps,
+                        f"Embedded: {_tech_text(embedded_error)}\n"
+                        f"External: {_tech_text(external_error)}",
+                    ))
         else:
             self.auto_play_target = rec["file_path"]
             self._start_download(rec)
@@ -1654,7 +1669,12 @@ class TapoViewerApp(ctk.CTk):
 
     def _start_download(self, rec: Dict[str, Any]):
         if self.active_download_thread and self.active_download_thread.is_alive():
-            self._show_error_dialog("ERR_DOWNLOAD_BUSY", "Download Busy", "Another clip is currently downloading. Please wait or cancel the active download.")
+            self._show_error_dialog(
+                "ERR_DOWNLOAD_BUSY",
+                "Download Busy",
+                "Another clip is currently downloading; the camera can only send one clip at a time.",
+                action="Wait for the current download to finish, or press Cancel and then start this one.",
+            )
             return
 
         self.btn_cancel_dl.configure(state="normal")
@@ -1675,8 +1695,8 @@ class TapoViewerApp(ctk.CTk):
                 )
                 self.after(0, lambda: self._on_download_complete(rec, file_path))
             except Exception as e:
-                err_msg = str(e)
-                self.after(0, lambda: self._on_download_error(err_msg))
+                diag = diagnose(e, CTX_DOWNLOAD)
+                self.after(0, lambda: self._on_download_error(diag))
 
         self.active_download_thread = threading.Thread(target=_worker, daemon=True)
         self.active_download_thread.start()
@@ -1716,11 +1736,15 @@ class TapoViewerApp(ctk.CTk):
             except Exception as exc:
                 print(f"Embedded auto-play warning: {exc}")
 
-    def _on_download_error(self, err_msg: str):
+    def _on_download_error(self, diag: Diagnosis):
         self.btn_cancel_dl.configure(state="disabled")
         self._set_progress_bar_idle()
-        self.lbl_download_title.configure(text="Download failed or cancelled")
-        self._show_error_dialog("ERR_DOWNLOAD_FAILED", "Download Error", f"Clip download failed:\n\n{err_msg}")
+        if diag.code == "INFO_DOWNLOAD_CANCELLED":
+            # User-initiated: no pop-up needed.
+            self.lbl_download_title.configure(text="Download cancelled")
+            return
+        self.lbl_download_title.configure(text=f"Download failed — {diag.title}")
+        self._show_diagnosis(diag)
 
     def _on_cancel_download(self):
         self.backend.cancel_download()
@@ -1743,11 +1767,15 @@ class TapoViewerApp(ctk.CTk):
                     f.write("ok")
                 os.remove(test_file)
             except Exception as e:
-                self._show_error_dialog(
-                    "ERR_STORAGE_PERM",
-                    "Storage Access Error",
-                    f"Cannot write to chosen directory:\n{folder}\n\nError: {e}\n\nPlease choose a different folder."
-                )
+                diag = diagnose(e, CTX_STORAGE)
+                self._show_diagnosis(Diagnosis(
+                    diag.code,
+                    diag.title,
+                    f"{diag.summary}\n\nFolder: {folder}",
+                    diag.causes,
+                    diag.steps,
+                    diag.technical,
+                ))
                 return
 
             self.config["output_dir"] = folder
@@ -1784,6 +1812,15 @@ class TapoViewerApp(ctk.CTk):
     # =========================================================================
     def _open_about_dialog(self):
         AboutDialog(self)
+
+    def _show_diagnosis(self, diag: Diagnosis):
+        """Show a full descriptive error: what happened, likely causes, how to fix it."""
+        title = f"{diag.title} ({diag.code})"
+        text = f"[{diag.code}]\n\n{diag.body()}"
+        if diag.code.startswith("INFO_"):
+            messagebox.showinfo(title, text)
+        else:
+            messagebox.showerror(title, text)
 
     def _show_error_dialog(self, code: str, title: str, explanation: str, action: str = ""):
         msg = f"[{code}] {explanation}"

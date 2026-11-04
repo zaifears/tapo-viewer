@@ -8,6 +8,7 @@ from typing import Callable, Optional, List, Dict, Any
 from pytapo import Tapo
 from pytapo.media_stream.downloader import Downloader
 
+from errors import CloudLoginError
 from runtime_paths import (
     ffmpeg_path,
     ffprobe_path,
@@ -373,7 +374,7 @@ class CameraBackend:
         except Exception as e:
             self.is_cloud_connected = False
             self.tapo = None
-            raise RuntimeError(f"Cloud/SD card authentication failed: {e}")
+            raise CloudLoginError(str(e)) from e
 
     def connect_cloud(self, cloud_password: Optional[str] = None, cloud_email: Optional[str] = None, *args, **kwargs) -> Dict[str, Any]:
         """
@@ -408,7 +409,7 @@ class CameraBackend:
         except Exception as e:
             self.is_cloud_connected = False
             self.tapo = None
-            raise
+            raise CloudLoginError(str(e)) from e
 
     def get_camera_details(self) -> Dict[str, Any]:
         return {
@@ -756,7 +757,10 @@ class CameraBackend:
         if self._cancel_download_event.is_set():
             raise RuntimeError("Download cancelled by user.")
         else:
-            raise RuntimeError(f"Download finished but {recording['file_name']} was not found or is empty.")
+            raise RuntimeError(
+                f"Download finished but {recording['file_name']} was not found or is empty "
+                f"(expected at {final_path})."
+            )
 
     def play_file(self, file_path: str, player_choice: str = "auto", custom_path: Optional[str] = None):
         if not os.path.exists(file_path):

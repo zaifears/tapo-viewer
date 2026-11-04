@@ -20,6 +20,7 @@
   <a href="https://github.com/zaifears/tapo-viewer/releases/latest"><b>📥 Download Standalone (.exe)</b></a> •
   <a href="#-app-previews"><b>📸 Previews</b></a> •
   <a href="#-features"><b>✨ Features</b></a> •
+  <a href="#actual-readme"><b>🔑 Actual Readme</b></a> •
   <a href="#-quick-start-running-from-source"><b>🚀 Quick Start</b></a> •
   <a href="#-special-thanks-to-pytapo"><b>❤️ PyTapo</b></a> •
   <a href="#-supported-cameras"><b>📹 Supported Devices</b></a>
@@ -80,6 +81,84 @@ Official Tapo desktop software does not exist, and viewing SD card recordings us
 - **Browse SD card recordings** through an interactive calendar with dots marking days that contain recordings.
 - **Download motion events and continuous recordings** directly to your computer as ready-to-watch `.mp4` video files.
 - **Keep everything 100% private and local.** The app communicates directly with your camera over your home Wi-Fi/LAN. Nothing is sent to third-party servers.
+
+---
+
+<a id="actual-readme"></a>
+## 🔑 Actual Readme
+> **The Two Tapo Accounts — read this before connecting!**
+
+Tapo cameras use **two completely separate logins**. Tapo-Viewer needs both, because live video and SD-card recordings are accessed in two different ways.
+
+| | **1. Camera Account** | **2. Tapo / TP-Link Cloud Account** |
+|---|---|---|
+| **What it is** | A local username + password you create *inside the camera's settings* | The email + password you use to sign in to the Tapo app (your TP-Link ID) |
+| **Created in** | Tapo app ➔ Camera ➔ ⚙️ ➔ Advanced Settings ➔ Camera Account | When you first registered in the Tapo app |
+| **Official purpose** | Third-party access: RTSP/ONVIF software, NAS, PC viewers | Your normal Tapo app login |
+| **Used by Tapo-Viewer for** | 🎥 **Live view** (RTSP stream on port 554) | 💾 **SD-card recordings** (calendar, listing & downloading, camera control port 443) |
+| **Where you type it here** | **Camera Account Username / Password** fields | **"Different Cloud Password"** option |
+
+> ⚠️ The Camera Account is **not** your TP-Link email login. TP-Link states it is intentionally kept separate so your main TP-Link ID credentials are never handed to third-party software, and recommends using a different, strong password for it.
+
+<a id="create-camera-account"></a>
+### Step 1 — Create the Camera Account (once per camera)
+
+Following [TP-Link's official guide](https://www.tp-link.com/us/support/faq/2790/):
+
+1. Open the **Tapo app** and tap your camera to open **Live View**.
+2. Tap the **gear icon** (top-right) to open **Device Settings**.
+3. Tap **Advanced Settings** ➔ **Camera Account**.
+4. Create a **username and password**. (If one exists already, enter the current password first, then set the new details.)
+5. Save it. Write the username and password down — you'll enter them in Tapo-Viewer.
+
+> 💡 Tip: If login fails later, reset the Camera Account and avoid special characters in the password. TP-Link's own troubleshooting suggests this for RTSP login problems.
+
+### Step 2 — Find your camera's IP address
+
+In the Tapo app: Camera ➔ ⚙️ ➔ **Device Info** ➔ **IP Address** (for example `192.168.0.103`). Giving the camera a fixed ("reserved") IP in your router stops it from changing.
+
+<a id="connect-in-tapo-viewer"></a>
+### Step 3 — Connect in Tapo-Viewer
+
+1. **Camera IP Address:** the address from Step 2 (no `http://` or port).
+2. **Camera Account Username / Password:** the account from Step 1.
+3. **Cloud password for SD-card access:**
+   - Tick **"Different Cloud Password"** and enter the password you use to sign in to the Tapo app (your TP-Link account password). **This is what most users need**, because it usually differs from the Camera Account password.
+   - Leave it unticked **only** if your Tapo/TP-Link password and Camera Account password happen to be identical.
+4. Click **Connect Camera**.
+
+**What happens behind the scenes:**
+
+```
+Step A  Camera Account  ──►  RTSP port 554   ──►  Live video          (proves camera account is correct)
+Step B  Cloud password  ──►  Control port 443 ──►  SD card calendar & clip downloads
+```
+
+Tapo-Viewer talks only to your camera over your local network. Your passwords are never sent to any server, and are saved only if you tick **"Remember credentials on this PC"** (stored in Windows Credential Manager).
+
+<a id="error-codes"></a>
+### Which error means what?
+
+| Error code | Meaning | Fix |
+|---|---|---|
+| `ERR_RTSP_AUTH` – *Camera Account Rejected* | Step A failed | Re-check the Camera Account username/password from Step 1 (case-sensitive; not your email login) |
+| `ERR_RTSP_REFUSED` / `ERR_CAMERA_TIMEOUT` | Camera not reachable | Check IP address, same network, camera online |
+| `ERR_CLOUD_AUTH` – *SD Card Login Rejected* | Step A worked, Step B failed | Tick **Different Cloud Password** and enter your Tapo app password |
+| `ERR_CAMERA_LOCKED` | Too many wrong attempts | Wait a few minutes, then retry with the correct password |
+
+Every error now shows its likely causes and numbered fix steps inside the app.
+
+### Good to know (from TP-Link's documentation)
+
+- **Camera Account only matters for third-party software.** If you only ever use the Tapo app, you never need it — but Tapo-Viewer does.
+- **Ports:** RTSP is on port **554** (`/stream1` = high quality, `/stream2` = standard quality); ONVIF uses port 2020.
+- **Battery-powered cameras** generally do not support RTSP/ONVIF, so they won't work with live view in this app. Some doorbells work only when hard-wired and in always-on mode. Check [TP-Link's list](https://www.tp-link.com/us/support/faq/4465/) for your model.
+- **Limited streams:** Tapo Care (cloud), SD-card recording and NVR/NAS/ONVIF software can't all run at once — only two of the three. Close other viewers if the camera reports it is busy.
+- **Dual-lens cameras:** only the wide-angle lens is available through RTSP/ONVIF.
+- **Firmware:** Some firmware updates change third-party login behavior. If connecting suddenly stops working after an update, re-create the Camera Account and re-enter your cloud password.
+- **Keep it local:** Do not port-forward the camera to the internet. TP-Link recommends a VPN instead, as RTSP is not designed for open internet exposure.
+
+Sources: [TP-Link: Tapo Camera Account](https://www.tp-link.com/us/support/faq/2790/) • [TP-Link: ONVIF & RTSP FAQ](https://www.tp-link.com/us/support/faq/4465/) • [TP-Link: Viewing a Tapo camera on PC/NAS/NVR](https://www.tp-link.com/us/support/faq/2680/) • [pytapo authentication notes](https://github.com/JurajNyiri/pytapo)
 
 ---
 
