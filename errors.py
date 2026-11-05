@@ -481,6 +481,26 @@ def _diagnose_download(exc: BaseException, text: str, low: str) -> Optional[Diag
             "You cancelled the download. Any partial file was not kept as a finished clip.",
             technical=tech,
         )
+    if "camera busy" in low:
+        return Diagnosis(
+            "ERR_CAMERA_BUSY",
+            "Camera Is Busy",
+            "The camera refused the download because another app or device is "
+            "already using its video stream.",
+            causes=[
+                "The Tapo app, an NVR/NAS, VLC or another viewer is streaming or "
+                "downloading from this camera right now.",
+                "Tapo Care, SD recording and NVR/NAS recording are all active "
+                "(the camera supports only two of the three at once).",
+            ],
+            steps=[
+                "Close the Tapo app and any other viewer or recorder using this camera.",
+                "Wait a few seconds, then start the download again.",
+                "If it keeps happening, switch live view to the SD (lower) quality or "
+                "turn off one of the recording options in the Tapo app.",
+            ],
+            technical=tech,
+        )
     if "was not found or is empty" in low:
         return Diagnosis(
             "ERR_DOWNLOAD_EMPTY",

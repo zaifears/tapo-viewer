@@ -9,7 +9,7 @@
 [![Latest Release](https://img.shields.io/github/v/release/zaifears/tapo-viewer?color=00A4E4&label=Latest%20Release&style=for-the-badge)](https://github.com/zaifears/tapo-viewer/releases)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/zaifears/tapo-viewer)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
-[![Powered by PyTapo](https://img.shields.io/badge/Powered%20By-PyTapo%20v3.4.26-00A4E4?style=for-the-badge&logo=github&logoColor=white)](https://github.com/JurajNyiri/pytapo)
+[![Powered by PyTapo](https://img.shields.io/badge/Powered%20By-PyTapo%20v3.4.30-00A4E4?style=for-the-badge&logo=github&logoColor=white)](https://github.com/JurajNyiri/pytapo)
 [![UI](https://img.shields.io/badge/UI-CustomTkinter-2B2D35?style=for-the-badge)](https://github.com/TomSchimansky/CustomTkinter)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 [![Privacy](https://img.shields.io/badge/Privacy-100%25%20Local-success?style=for-the-badge)](https://github.com/zaifears/tapo-viewer)

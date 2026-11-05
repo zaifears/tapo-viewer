@@ -632,7 +632,8 @@ class CameraBackend:
             window_size=200
         )
 
-        async for status in downloader.download():
+        status_stream = downloader.download()
+        async for status in status_stream:
             if self._cancel_download_event.is_set():
                 if progress_cb:
                     progress_cb({
@@ -644,6 +645,16 @@ class CameraBackend:
                 break
 
             action = status.get("currentAction", "Downloading")
+
+            if action == "Camera busy":
+                # pytapo >= 3.4.27 reports this immediately when another client
+                # holds the camera's media stream.
+                await status_stream.aclose()
+                raise RuntimeError(
+                    "Camera busy: another app or device is already streaming "
+                    f"from the camera (code {status.get('errorCode')})."
+                )
+
             progress = status.get("progress", 0)
             total = status.get("total", total_duration)
 
